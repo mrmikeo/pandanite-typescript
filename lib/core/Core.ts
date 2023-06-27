@@ -399,11 +399,12 @@ console.log(target);
         const newBuffer = Buffer.concat(buffers);
 
 console.log(newBuffer);
+console.log(newBuffer.toString('hex'));
 
         const pufferHash = pufferFish.PUFFERFISH(newBuffer, newBuffer.length);
 
 console.log("Pufferhash");
-console.log(JSON.stringify(pufferHash, null, 2));
+console.log(pufferHash);
 
         const concatHashes = crypto.createHash('sha256').update(pufferHash).digest().toString('hex');
 

@@ -3,7 +3,7 @@
 #include <iostream>
 
 
-char* PUFFERFISH(const char* buffer, size_t len);
+std::string PUFFERFISH(const char* buffer, size_t len);
 
 Napi::Value PufferFishWrapped(const Napi::CallbackInfo& info) {
   Napi::Env env = info.Env();
@@ -27,9 +27,9 @@ Napi::Value PufferFishWrapped(const Napi::CallbackInfo& info) {
 
   size_t len = info[1].As<Napi::Number>().Uint32Value();
 
-  char* returnValue = PUFFERFISH(buffer, len);
+  std::string returnValue = PUFFERFISH(buffer, len);
 
-  return Napi::Buffer<char>::New(env, returnValue, PF_HASHSPACE);
+  return Napi::String::New(info.Env(), returnValue); //Napi::Buffer<char>::New(env, returnValue, PF_HASHSPACE);
 }   
 
 Napi::Object Init(Napi::Env env, Napi::Object exports)
@@ -41,29 +41,24 @@ Napi::Object Init(Napi::Env env, Napi::Object exports)
   return exports;
 }
 
-char* PUFFERFISH(const char* buffer, size_t len) {
+std::string PUFFERFISH(const char* buffer, size_t len) {
 
     char hash[PF_HASHSPACE];
     memset(hash, 0, PF_HASHSPACE);
 
-    std::string returnValue4("test4"); 
-    std::cout << returnValue4 << std::endl;
-
     int ret = 0;
     if ((ret = pf_newhash((const void*) buffer, len, 0, 8, hash)) != 0) {
-       //Logger::logStatus("PUFFERFISH failed to compute hash");
       std::string stringValue("PUFFERFISH failed to compute hash"); 
       std::cout << stringValue << std::endl;
     }
 
-  std::string returnValue5("test5"); 
-  std::cout << returnValue5 << std::endl;
-
-  std::string returnValue6("pufferhash string"); 
+  std::string returnValue6("pufferhash string value"); 
+  std::string hashString = hash;
   std::cout << returnValue6 << std::endl;
   std::cout << hash << std::endl;
+  std::cout << hashString << std::endl;
 
-    return hash;
+    return hashString;
 }
 
 
