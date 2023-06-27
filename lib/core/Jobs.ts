@@ -603,7 +603,7 @@ export class PandaniteJobs{
             lastHeight = lastBlock[0].height;
             let expectedHeight = lastHeight + 1;
 
-            if (block.id !== expectedHeight)
+            if (block.id != expectedHeight)
             {
                 throw new Error('Invalid Block. Unexpected Height');
             }
@@ -611,6 +611,7 @@ export class PandaniteJobs{
             try {
                 isValid = PandaniteCore.checkBlockValid(block, lastBlock[0].blockHash, lastBlock[0].height, false);
             } catch (e) {
+                console.log(e);
                 throw new Error('Invalid Block.');
             }
         }
@@ -618,9 +619,9 @@ export class PandaniteJobs{
         {
 
             try {
-                isValid = await PandaniteCore.checkBlockValid(block, "0000000000000000000000000000000000000000000000000000000000000000", 0, false);
+                isValid = PandaniteCore.checkBlockValid(block, "0000000000000000000000000000000000000000000000000000000000000000", 0, false);
             } catch (e) {
-                throw new Error('Invalid Block. Invalid BlockHash');
+                throw new Error('Invalid Block.');
             }
 
         }

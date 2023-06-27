@@ -136,7 +136,7 @@ export class PandaniteCore{
     static checkBlockValid(block: any, lastBlockHash: string, lastBlockHeight: number, isSubmitBlock: boolean): boolean {
 
         // Check Block ID
-        if (block.id != lastBlockHash + 1)
+        if (block.id != lastBlockHeight + 1)
         {
             console.log("Invalid Block Height: " + block.id);
             return false;
