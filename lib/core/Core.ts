@@ -133,10 +133,41 @@ class MerkleTree {
 
 export class PandaniteCore{
 
-    static checkBlockHash(block: any, lastBlockHash: string): boolean {
+    static checkBlockValid(block: any, lastBlockHash: string, lastBlockHeight: number, isSubmitBlock: boolean): boolean {
+
+        // Check Block ID
+        if (block.id != lastBlockHash + 1)
+        {
+            console.log("Invalid Block Height: " + block.id);
+            return false;
+        }
+
+        // Check transactions size
+        const blockTxSize = block.transactions.length;
+        if (blockTxSize > MAX_TRANSACTIONS_PER_BLOCK)
+        {
+            console.log("Invalid Transaction Count: " + blockTxSize);
+            return false;
+        }
+
+        // Validate Block Difficulty
+        
+        
+
+
+
+
+        // Validate Block Time
+        if (isSubmitBlock === true && block.id !== 1)
+        {
+
+
+
+            
+        }
 
         // Validate Transactions in Block
-        for (let i = 0; i < block.transactions.length; i++)
+        for (let i = 0; i < blockTxSize; i++)
         {
             let thisTx = block.transactions[i];
             let isValid = PandaniteCore.validateTransaction(thisTx);
@@ -169,7 +200,7 @@ export class PandaniteCore{
             console.log("Block Hash Actual: " + actualBlockHash);
             return false;
         }
-        
+
         // Check Nonce
         const validNonce = PandaniteCore.verifyNonce(block);
         if (validNonce === false)
@@ -177,6 +208,14 @@ export class PandaniteCore{
             console.log("Invalid Block Nonce: " + block.nonce);
             return false;
         }
+
+        
+
+
+
+
+
+
         return true;
     }
 

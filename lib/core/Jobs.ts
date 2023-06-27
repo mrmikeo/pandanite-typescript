@@ -595,12 +595,13 @@ export class PandaniteJobs{
 
         const lastBlock = await Block.find().sort({height: -1}).limit(1);
 
+        let lastHeight = 0;
+        let isValid = false;
+
         if (lastBlock.length > 0)
         {
-
-            let lastHeight = lastBlock[0].height;
+            lastHeight = lastBlock[0].height;
             let expectedHeight = lastHeight + 1;
-            let isValid = false;
 
             if (block.id !== expectedHeight)
             {
@@ -608,236 +609,124 @@ export class PandaniteJobs{
             }
 
             try {
-                isValid = PandaniteCore.checkBlockHash(block, lastBlock[0].blockHash);
+                isValid = PandaniteCore.checkBlockValid(block, lastBlock[0].blockHash, lastBlock[0].height, false);
             } catch (e) {
-                throw new Error('Invalid Block. Invalid BlockHash');
+                throw new Error('Invalid Block.');
             }
-
-            if (isValid === true)
-            {
-
-                const totalWork = Big(lastBlock[0].totalWork).plus(block.difficulty).toFixed(0);
-
-                // add block to db
-
-                const newBlock = {
-                    nonce: block.nonce,
-                    height: block.id,
-                    totalWork: totalWork,
-                    difficulty: block.difficulty,
-                    timestamp: block.timestamp,
-                    merkleRoot: block.merkleRoot,
-                    blockHash: block.hash,
-                    lastBlockHash: block.lastBlockHash,
-                    transactions: [],
-                    createdAt: Date.now(),
-                    updatedAt: Date.now()
-                };
-
-                const blockInfo = await Block.create(newBlock);
-
-                let blockTx = [];
-
-                for (let i = 0; i < block.transactions.length; i++)
-                {
-
-                    const thisTx = block.transactions[i];
-
-                    let toAddress = await Address.findOne({address: thisTx.to});
-                    let fromAddress = await Address.findOne({address: thisTx.from});
-
-                    if (!toAddress)
-                    {
-                        toAddress = await Address.create({
-                            address: thisTx.to,
-                            publicKey: "",
-                            createdAt: Date.now(),
-                            updatedAt: Date.now()
-                        });
-                    }
-
-                    if (!fromAddress)
-                    {
-                        fromAddress = await Address.create({
-                            address: thisTx.from,
-                            publicKey: "",
-                            createdAt: Date.now(),
-                            updatedAt: Date.now()
-                        });
-                    }
-                    const newTransaction = {
-                        toAddress: toAddress._id,
-                        fromAddress: fromAddress._id,
-                        signature: thisTx.signature,
-                        hash: thisTx.txid,
-                        amount: thisTx.amount,
-                        token: null,
-                        fee: thisTx.fee,
-                        isGenerate: thisTx.from===""?true:false,
-                        timestamp: thisTx.timestamp,
-                        signingKey: thisTx.signingKey,
-                        block: blockInfo._id,
-                        blockIndex: i,
-                        createdAt: Date.now(),
-                        updatedAt: Date.now()
-                    }
-
-                    const newTx = await Transaction.create(newTransaction);
-
-                    blockTx.push(newTx._id);
-
-                    if (thisTx.from !== "00000000000000000000000000000000000000000000000000" && thisTx.from !== "")
-                    {
-                        const numbernegative = thisTx.amount * -1;
-                        await Balance.updateOne({address: fromAddress._id, token: null}, {$inc: {balance: numbernegative}});
-                    }
-
-                    const haveToBalance = await Balance.findOne({address: toAddress._id, token: null});
-
-                    if (!haveToBalance)
-                    {
-                        await Balance.create({
-                            address: toAddress._id,
-                            token: null,
-                            balance: thisTx.amount,
-                            createdAt: Date.now(),
-                            updatedAt: Date.now()
-                        });
-
-                    }
-                    else
-                    {
-                        await Balance.updateOne({address: toAddress._id, token: null}, {$inc: {balance: thisTx.amount}});
-                    }
-
-                }
-
-                await Block.updateOne({_id: blockInfo._id}, {$set: {transactions: blockTx}});
-
-                console.log("Imported Block #" + block.id);
-
-            }
-            else
-            {
-                throw new Error('Invalid Block. Invalid BlockHash');
-            }
-        
         }
         else if (block.id === 1)
         {
 
-            let isValid = false;
-
             try {
-                isValid = await PandaniteCore.checkBlockHash(block, "0000000000000000000000000000000000000000000000000000000000000000");
+                isValid = await PandaniteCore.checkBlockValid(block, "0000000000000000000000000000000000000000000000000000000000000000", 0, false);
             } catch (e) {
                 throw new Error('Invalid Block. Invalid BlockHash');
             }
 
-            if (isValid === true)
+        }
+
+        if (isValid === true)
+        {
+
+            const totalWork = Big(lastBlock[0].totalWork).plus(block.difficulty).toFixed(0);
+
+            // add block to db
+
+            const newBlock = {
+                nonce: block.nonce,
+                height: block.id,
+                totalWork: totalWork,
+                difficulty: block.difficulty,
+                timestamp: block.timestamp,
+                merkleRoot: block.merkleRoot,
+                blockHash: block.hash,
+                lastBlockHash: block.lastBlockHash,
+                transactions: [],
+                createdAt: Date.now(),
+                updatedAt: Date.now()
+            };
+
+            const blockInfo = await Block.create(newBlock);
+
+            let blockTx = [];
+
+            for (let i = 0; i < block.transactions.length; i++)
             {
 
-                const totalWork = Big(block.difficulty).toFixed(0);
+                const thisTx = block.transactions[i];
 
-                // add block to db
+                let toAddress = await Address.findOne({address: thisTx.to});
+                let fromAddress = await Address.findOne({address: thisTx.from});
 
-                const newBlock = {
-                    nonce: block.nonce,
-                    height: block.id,
-                    totalWork: totalWork,
-                    difficulty: block.difficulty,
-                    timestamp: block.timestamp,
-                    merkleRoot: block.merkleRoot,
-                    blockHash: block.hash,
-                    lastBlockHash: block.lastBlockHash,
-                    transactions: [],
-                    createdAt: Date.now(),
-                    updatedAt: Date.now()
-                };
-
-                const blockInfo = await Block.create(newBlock);
-
-                let blockTx = [];
-
-                for (let i = 0; i < block.transactions.length; i++)
+                if (!toAddress)
                 {
-
-                    const thisTx = block.transactions[i];
-
-                    let toAddress = await Address.findOne({address: thisTx.to});
-                    let fromAddress = await Address.findOne({address: thisTx.from});
-
-                    if (!toAddress)
-                    {
-                        toAddress = await Address.create({
-                            address: thisTx.to,
-                            publicKey: "",
-                            createdAt: Date.now(),
-                            updatedAt: Date.now()
-                        });
-                    }
-
-                    if (!fromAddress)
-                    {
-                        fromAddress = await Address.create({
-                            address: thisTx.from,
-                            publicKey: "",
-                            createdAt: Date.now(),
-                            updatedAt: Date.now()
-                        });
-                    }
-                    const newTransaction = {
-                        toAddress: toAddress._id,
-                        fromAddress: fromAddress._id,
-                        signature: thisTx.signature,
-                        hash: thisTx.txid,
-                        amount: thisTx.amount,
-                        token: null,
-                        fee: thisTx.fee,
-                        isGenerate: thisTx.from===""?true:false,
-                        timestamp: thisTx.timestamp,
-                        signingKey: thisTx.signingKey,
-                        block: blockInfo._id,
-                        blockIndex: i,
+                    toAddress = await Address.create({
+                        address: thisTx.to,
+                        publicKey: "",
                         createdAt: Date.now(),
                         updatedAt: Date.now()
-                    }
-
-                    const newTx = await Transaction.create(newTransaction);
-
-                    blockTx.push(newTx._id);
-
-                    if (thisTx.from !== "00000000000000000000000000000000000000000000000000" && thisTx.from !== "")
-                    {
-                        const numbernegative = thisTx.amount * -1;
-                        await Balance.updateOne({address: fromAddress._id, token: null}, {$inc: {balance: numbernegative}});
-                    }
-
-                    const haveToBalance = await Balance.findOne({address: toAddress._id, token: null});
-
-                    if (!haveToBalance)
-                    {
-                        await Balance.create({
-                            address: toAddress._id,
-                            token: null,
-                            balance: thisTx.amount,
-                            createdAt: Date.now(),
-                            updatedAt: Date.now()
-                        });
-
-                    }
-                    else
-                    {
-                        await Balance.updateOne({address: toAddress._id, token: null}, {$inc: {balance: thisTx.amount}});
-                    }
-
+                    });
                 }
 
-                await Block.updateOne({_id: blockInfo._id}, {$set: {transactions: blockTx}});
+                if (!fromAddress)
+                {
+                    fromAddress = await Address.create({
+                        address: thisTx.from,
+                        publicKey: "",
+                        createdAt: Date.now(),
+                        updatedAt: Date.now()
+                    });
+                }
+                const newTransaction = {
+                    toAddress: toAddress._id,
+                    fromAddress: fromAddress._id,
+                    signature: thisTx.signature,
+                    hash: thisTx.txid,
+                    amount: thisTx.amount,
+                    token: null,
+                    fee: thisTx.fee,
+                    isGenerate: thisTx.from===""?true:false,
+                    timestamp: thisTx.timestamp,
+                    signingKey: thisTx.signingKey,
+                    block: blockInfo._id,
+                    blockIndex: i,
+                    createdAt: Date.now(),
+                    updatedAt: Date.now()
+                }
 
-                console.log("Imported Block #" + block.id);
+                const newTx = await Transaction.create(newTransaction);
+
+                blockTx.push(newTx._id);
+
+                if (thisTx.from !== "00000000000000000000000000000000000000000000000000" && thisTx.from !== "")
+                {
+                    const numbernegative = thisTx.amount * -1;
+                    await Balance.updateOne({address: fromAddress._id, token: null}, {$inc: {balance: numbernegative}});
+                }
+
+                const haveToBalance = await Balance.findOne({address: toAddress._id, token: null});
+
+                if (!haveToBalance)
+                {
+                    await Balance.create({
+                        address: toAddress._id,
+                        token: null,
+                        balance: thisTx.amount,
+                        createdAt: Date.now(),
+                        updatedAt: Date.now()
+                    });
+
+                }
+                else
+                {
+                    await Balance.updateOne({address: toAddress._id, token: null}, {$inc: {balance: thisTx.amount}});
+                }
 
             }
+
+            await Block.updateOne({_id: blockInfo._id}, {$set: {transactions: blockTx}});
+
+            console.log("Imported Block #" + block.id);
 
         }
         else
