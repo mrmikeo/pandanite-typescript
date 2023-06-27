@@ -1,0 +1,9 @@
+node_modules
+dist
+*.log
+build
+
+# sphinx folders
+_build
+_static
+_templates

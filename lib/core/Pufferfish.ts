@@ -1,0 +1,1 @@
+export const pufferFish = require('../../build/Release/pufferfish.node');

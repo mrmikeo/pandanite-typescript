@@ -1,0 +1,47 @@
+{
+  "name": "pandanite-node",
+  "version": "1.0.0",
+  "description": "An API built with NodeJS, Express, MongoDB and TypeScript",
+  "main": "dist/server.js",
+  "gypfile": true,
+  "scripts": {
+    "test": "echo \"Error: no test specified\" && exit 1",
+    "build": "node-gyp rebuild",
+    "buildtsc": "tsc",
+    "dev": "ts-node ./lib/server.ts",
+    "start": "nodemon ./dist/server.js",
+    "prod": "npm run build && npm run start",
+    "clean": "node-gyp clean"
+  },
+  "keywords": [
+    "Pandanite"
+  ],
+  "author": "Mike Osullivan",
+  "license": "ISC",
+  "dependencies": {
+    "@types/big.js": "^6.1.6",
+    "@types/cors": "^2.8.13",
+    "@types/crypto-js": "^4.1.1",
+    "@types/express": "^4.17.17",
+    "@types/node": "^20.3.1",
+    "@types/underscore": "^1.11.5",
+    "@noble/ed25519": "^2.0.0",
+    "axios": "^1.4.0",
+    "big.js": "^6.2.1",
+    "body-parser": "^1.20.2",
+    "cors": "^2.8.5",
+    "crypto-js": "^4.1.1",
+    "ed25519": "^0.0.5",
+    "express": "^4.18.2",
+    "helmet": "^7.0.0",
+    "mongoose": "^5.7.5",
+    "node-addon-api": "^7.0.0",
+    "nodemon": "^2.0.22",
+    "underscore": "^1.13.6"
+  },
+  "devDependencies": {
+    "node-gyp": "^9.4.0",
+    "ts-node": "^10.9.1",
+    "typescript": "^5.1.3"
+  }
+}
