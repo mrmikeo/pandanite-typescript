@@ -399,14 +399,15 @@ console.log(target);
         const newBuffer = Buffer.concat(buffers);
 
 console.log(newBuffer);
-console.log(newBuffer.toString('hex'));
 
-        const pufferHash = pufferFish.PUFFERFISH(newBuffer.toString('hex'));
+        const pufferHash = pufferFish.PUFFERFISH(newBuffer, newBuffer.length);
 
-console.log(pufferHash);
+console.log("Pufferhash");
+console.log(JSON.stringify(pufferHash, null, 2));
 
-        const concatHashes = crypto.createHash('sha256').update(unhexlify(pufferHash)).digest().toString('hex');
+        const concatHashes = crypto.createHash('sha256').update(pufferHash).digest().toString('hex');
 
+console.log("concatHashes");
 console.log(concatHashes);
 
         return PandaniteCore.checkLeadingZeroBits(concatHashes, difficulty);
