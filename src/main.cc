@@ -2,8 +2,11 @@
 #include "pufferfish.h"
 #include <iostream>
 
-
+typedef std::array<uint8_t, 32> SHA256Hash;
 std::string PUFFERFISH(const char* buffer, size_t len);
+SHA256Hash SHA256(const char* buffer, size_t len);
+std::string hexEncode(const char* buffer, size_t len);
+std::string SHA256toString(SHA256Hash h);
 
 Napi::Value PufferFishWrapped(const Napi::CallbackInfo& info) {
   Napi::Env env = info.Env();
@@ -29,7 +32,7 @@ Napi::Value PufferFishWrapped(const Napi::CallbackInfo& info) {
 
   std::string returnValue = PUFFERFISH(buffer, len);
 
-  return Napi::String::New(info.Env(), returnValue); //Napi::Buffer<char>::New(env, returnValue, PF_HASHSPACE);
+  return Napi::String::New(env, returnValue); 
 }   
 
 Napi::Object Init(Napi::Env env, Napi::Object exports)
@@ -52,14 +55,35 @@ std::string PUFFERFISH(const char* buffer, size_t len) {
       std::cout << stringValue << std::endl;
     }
 
-  std::string returnValue6("pufferhash string value"); 
-  std::string hashString = hash;
-  std::cout << returnValue6 << std::endl;
-  std::cout << hash << std::endl;
-  std::cout << hashString << std::endl;
+    std::string hashString = SHA256toString(SHA256(hash, PF_HASHSPACE));
 
     return hashString;
 }
 
+SHA256Hash SHA256(const char* buffer, size_t len) {
+    std::array<uint8_t, 32> ret;
+    SHA256_CTX sha256;
+    SHA256_Init(&sha256);
+    SHA256_Update(&sha256, buffer, len);
+    SHA256_Final(ret.data(), &sha256);
+
+    return ret;
+}
+
+std::string hexEncode(const char* buffer, size_t len) {
+    static const char* const lut = "0123456789ABCDEF";
+    std::string output;
+    output.reserve(2 * len);
+    for (size_t i = 0; i < len; ++i) {
+        const unsigned char c = buffer[i];
+        output.push_back(lut[c >> 4]);
+        output.push_back(lut[c & 15]);
+    }
+    return output;
+}
+
+std::string SHA256toString(SHA256Hash h) {
+    return hexEncode((const char*)h.data(), h.size());
+}
 
 NODE_API_MODULE(pufferfish, Init)

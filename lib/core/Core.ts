@@ -169,7 +169,7 @@ export class PandaniteCore{
             console.log("Block Hash Actual: " + actualBlockHash);
             return false;
         }
-
+        
         // Check Nonce
         const validNonce = PandaniteCore.verifyNonce(block);
         if (validNonce === false)
@@ -177,96 +177,64 @@ export class PandaniteCore{
             console.log("Invalid Block Nonce: " + block.nonce);
             return false;
         }
-
         return true;
-
     }
 
     static checkMerkleTree(items: any): string {
-
         // generate hash
         for (let i = 0; i < items.length; i++)
         {
             items[i].hash = PandaniteCore.getTransactionHash(items[i], true);
         }
-
         let merkleTree = new MerkleTree();
-
         merkleTree.setItems(items);
-
         const root = merkleTree.getRootHash();
-
         // return merkleroot hash
         return root.toUpperCase();
-
     }
 
     static validateTransaction(transaction: any): boolean {
-
         if (transaction.from == "" || transaction.from == "00000000000000000000000000000000000000000000000000") return true;
-
         const txId = PandaniteCore.getTransactionId(transaction);
-
         return PandaniteCore.verifyTransactionSignature(txId, transaction.signingKey, transaction.signature);
-
     }
 
     static signMessage(message: string, publicKey: string, privateKey: string) {
     
         try {
-
             const keyPair = {
                 publicKey: Buffer.from(publicKey, 'hex'),
                 privateKey: Buffer.from(privateKey, 'hex')
             }
-
             let signature = ed25519.Sign(Buffer.from(message, 'utf8'), keyPair);
-
             return signature.toString();
-            
         } catch (e) {
-
             return false;
-
         }
-    
     }
 
     static signTransaction(txid: string, publicKey: string, privateKey: string) {
-    
         try {
-
             const keyPair = {
                 publicKey: Buffer.from(publicKey, 'hex'),
                 privateKey: Buffer.from(privateKey, 'hex')
             }
-
             let signature = ed25519.Sign(Buffer.from(txid, 'hex'), keyPair);
-
             return signature.toString();
-            
         } catch (e) {
-
             return false;
-
         }
-    
     }
 
     static verifyTransactionSignature(txid: string, publicKey: string, signature: string) {
-
-        return ed25519.Verify(Buffer.from(txid, 'hex'), Buffer.from(signature, 'hex'), Buffer.from(publicKey, 'hex'));
-            
+        return ed25519.Verify(Buffer.from(txid, 'hex'), Buffer.from(signature, 'hex'), Buffer.from(publicKey, 'hex'));  
     }
 
     static verifyMessage(message: string, publicKey: string, signature: string) {
-
         return ed25519.Verify(Buffer.from(message, 'utf8'), Buffer.from(signature, 'hex'), Buffer.from(publicKey, 'hex'));
-    
     }
 
     static getTransactionId(transaction: any): string {
-
         const pad = function(n: string, width: number, z: string) {
             z = z || '0';
             n = n + '';
@@ -316,11 +284,9 @@ export class PandaniteCore{
         }
 
         return ctx.digest().toString('hex');
-
     }
 
     static getTransactionHash(transaction: any, withsignature: boolean): string {
-
         let ctx = crypto.createHash('sha256');
 
         ctx.update(unhexlify(PandaniteCore.getTransactionId(transaction)));
@@ -333,11 +299,9 @@ export class PandaniteCore{
         }
 
         return ctx.digest().toString('hex');
-
     }
 
     static getBlockHash(block: any): string {
-
         const pad = function(n: string, width: number, z: string) {
             z = z || '0';
             n = n + '';
@@ -363,23 +327,14 @@ export class PandaniteCore{
         ctx.update(unhexlify(swaptimestamp));
 
         return ctx.digest().toString('hex');
-
     }
 
     static verifyNonce(block: any): boolean {
-
-        // TODO: integrate pufferfish
-
         const blockHash = PandaniteCore.getBlockHash(block);
 
         const usePufferfish = block.id > PUFFERFISH_START_BLOCK;
 
-console.log(usePufferfish);
-
         const target = this.getBlockHash(block);
-
-console.log(target);
-
 
         if (usePufferfish)
         {
@@ -389,40 +344,18 @@ console.log(target);
         {
             return PandaniteCore.verifySha256Hash(target, block.nonce, block.difficulty);
         }
-        
     }
 
     static verifyPufferHash(target: string, nonce: string, difficulty: number): boolean {
-
         const buffers = [unhexlify(target), unhexlify(nonce)];
-
         const newBuffer = Buffer.concat(buffers);
-
-console.log(newBuffer);
-console.log(newBuffer.toString('hex'));
-
         const pufferHash = pufferFish.PUFFERFISH(newBuffer, newBuffer.length);
-
-console.log("Pufferhash");
-console.log(pufferHash);
-
-        const concatHashes = crypto.createHash('sha256').update(pufferHash).digest().toString('hex');
-
-console.log("concatHashes");
-console.log(concatHashes);
-
-        return PandaniteCore.checkLeadingZeroBits(concatHashes, difficulty);
-
+        return PandaniteCore.checkLeadingZeroBits(pufferHash, difficulty);
     }
 
     static verifySha256Hash(target: string, nonce: string, difficulty: number): boolean {
-
         const concatHashes = crypto.createHash('sha256').update(unhexlify(target)).update(unhexlify(nonce)).digest().toString('hex');
-
-console.log(concatHashes);
-
         return PandaniteCore.checkLeadingZeroBits(concatHashes, difficulty);
-
     }
 
     static checkLeadingZeroBits(hash: string, challengeSize: number): boolean {
