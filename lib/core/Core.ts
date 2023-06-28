@@ -133,90 +133,81 @@ class MerkleTree {
 
 export class PandaniteCore{
 
-    static checkBlockValid(block: any, lastBlockHash: string, lastBlockHeight: number, isSubmitBlock: boolean): boolean {
+    static async checkBlockValid(block: any, lastBlockHash: string, lastBlockHeight: number, isSubmitBlock: boolean): Promise<boolean> {
 
-        // Check Block ID
-        if (block.id != lastBlockHeight + 1)
-        {
-            console.log("Invalid Block Height: " + block.id);
-            return false;
-        }
+        return new Promise<boolean>((resolve, reject) => {
 
-        // Check transactions size
-        const blockTxSize = block.transactions.length;
-        if (blockTxSize > MAX_TRANSACTIONS_PER_BLOCK)
-        {
-            console.log("Invalid Transaction Count: " + blockTxSize);
-            return false;
-        }
-
-        // Validate Block Difficulty
-        
-        
-
-
-
-
-        // Validate Block Time
-        if (isSubmitBlock === true && block.id !== 1)
-        {
-
-
-
-            
-        }
-
-        // Validate Transactions in Block
-        for (let i = 0; i < blockTxSize; i++)
-        {
-            let thisTx = block.transactions[i];
-            let isValid = PandaniteCore.validateTransaction(thisTx);
-            if (isValid === false) 
+            // Check Block ID
+            if (block.id != lastBlockHeight + 1)
             {
-                console.log("checkBlockHash failed at Validate Transactions");
-                console.log(thisTx);
-                return false;
+                reject("Invalid Block Height: " + block.id);
             }
-        }
 
-        // Validate MerkleTree
-        const expectedMerkleHash = block.merkleRoot;
-        const actualMerkleHash = PandaniteCore.checkMerkleTree(block.transactions);
+            // Check transactions size
+            const blockTxSize = block.transactions.length;
+            if (blockTxSize > MAX_TRANSACTIONS_PER_BLOCK)
+            {
+                reject("Invalid Transaction Count: " + blockTxSize);
+            }
 
-        if (expectedMerkleHash !== actualMerkleHash) {
-            console.log("checkBlockHash failed at Validate MerkleTree");
-            console.log("Merkle Root Expected: " + expectedMerkleHash);
-            console.log("Merkle Root Actual: " + actualMerkleHash);
-            return false;
-        }
-
-        // Validate Blockhash
-        const expectedBlockHash = block.hash;
-        const actualBlockHash = PandaniteCore.getBlockHash(block).toUpperCase();
-
-        if (expectedBlockHash !== actualBlockHash) {
-            console.log("checkBlockHash failed at Validate Blockhash");
-            console.log("Block Hash Expected: " + expectedBlockHash);
-            console.log("Block Hash Actual: " + actualBlockHash);
-            return false;
-        }
-
-        // Check Nonce
-        const validNonce = PandaniteCore.verifyNonce(block);
-        if (validNonce === false)
-        {
-            console.log("Invalid Block Nonce: " + block.nonce);
-            return false;
-        }
-
-        
+            // Validate Block Difficulty
+            
+            
 
 
 
 
+            // Validate Block Time
+            if (isSubmitBlock === true && block.id !== 1)
+            {
 
 
-        return true;
+
+                
+            }
+
+            // Validate Transactions in Block
+            for (let i = 0; i < blockTxSize; i++)
+            {
+                const thisTx = block.transactions[i];
+                const isValid = PandaniteCore.validateTransaction(thisTx);
+                if (isValid === false) 
+                {
+                    reject("checkBlockHash failed at Validate Transaction");
+                }
+            }
+
+            // Validate MerkleTree
+            const expectedMerkleHash = block.merkleRoot;
+            const actualMerkleHash = PandaniteCore.checkMerkleTree(block.transactions);
+
+            if (expectedMerkleHash !== actualMerkleHash) {
+                console.log("Merkle Root Expected: " + expectedMerkleHash);
+                console.log("Merkle Root Actual: " + actualMerkleHash);
+                reject("checkBlockHash failed at Validate MerkleTree");
+            }
+
+            // Validate Blockhash
+            const expectedBlockHash = block.hash;
+            const actualBlockHash = PandaniteCore.getBlockHash(block).toUpperCase();
+
+            if (expectedBlockHash !== actualBlockHash) {
+                console.log("Block Hash Expected: " + expectedBlockHash);
+                console.log("Block Hash Actual: " + actualBlockHash);
+                reject("checkBlockHash failed at Validate Blockhash");
+            }
+
+            // Check Nonce
+            const validNonce = PandaniteCore.verifyNonce(block);
+            if (validNonce === false)
+            {
+                reject("Invalid Block Nonce: " + block.nonce);
+            }
+
+            resolve(true);
+
+        });
+
     }
 
     static checkMerkleTree(items: any): string {

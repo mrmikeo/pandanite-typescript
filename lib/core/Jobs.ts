@@ -310,9 +310,9 @@ export class PandaniteJobs{
                     if (this.activePeers.indexOf(peer) === -1)
                         this.activePeers.push(peer);
 
-                    let havePeer = await Peer.findOne({url: peer});
-
                     this.peerHeights[peer] = parseInt(data);
+
+                    let havePeer = await Peer.findOne({url: peer});
 
                     if (!havePeer)
                     {
@@ -416,6 +416,7 @@ export class PandaniteJobs{
                     }
 
                 } catch (e) {
+
                     // peer timeout
                     
                 }
@@ -609,19 +610,20 @@ export class PandaniteJobs{
             }
 
             try {
-                isValid = PandaniteCore.checkBlockValid(block, lastBlock[0].blockHash, lastBlock[0].height, false);
+                isValid = await PandaniteCore.checkBlockValid(block, lastBlock[0].blockHash, lastBlock[0].height, false);
             } catch (e) {
                 console.log(e);
-                throw new Error('Invalid Block.');
+                throw new Error(e);
             }
         }
         else if (block.id === 1)
         {
 
             try {
-                isValid = PandaniteCore.checkBlockValid(block, "0000000000000000000000000000000000000000000000000000000000000000", 0, false);
+                isValid = await PandaniteCore.checkBlockValid(block, "0000000000000000000000000000000000000000000000000000000000000000", 0, false);
             } catch (e) {
-                throw new Error('Invalid Block.');
+                console.log(e);
+                throw new Error(e);
             }
 
         }
