@@ -30,7 +30,7 @@ class App {
     }
 
     private mongoSetup(): void{
-        mongoose.connect(this.mongoUrl, { useNewUrlParser: true, useUnifiedTopology: true });        
+        mongoose.connect(this.mongoUrl, { useNewUrlParser: true, useUnifiedTopology: true, useCreateIndex: true });        
     }
 
 }

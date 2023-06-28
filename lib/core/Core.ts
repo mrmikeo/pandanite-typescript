@@ -1,17 +1,8 @@
 import * as ed25519 from 'ed25519';
 import * as _ from 'underscore';
-//import { MerkleTree } from 'merkletreejs'
-//import { SHA256 } from 'crypto-js'
 import * as crypto from 'crypto'
 import { pufferFish } from './Pufferfish'
-
-const NULL_SHA256_HASH = "0000000000000000000000000000000000000000000000000000000000000000";
-const PUFFERFISH_START_BLOCK = 124500;
-const MAX_TRANSACTIONS_PER_BLOCK = 25000;
-const DIFFICULTY_LOOKBACK = 100;
-const DESIRED_BLOCK_TIME_SEC = 90;
-const MIN_DIFFICULTY = 6;
-const MAX_DIFFICULTY = 255;
+import { Constants} from "./Constants"
 
 const unhexlify = function(str: string) { 
     var result = [];
@@ -87,7 +78,7 @@ class MerkleTree {
         while (q.length > 1) {
             const a = q.shift()!;
             const b = q.shift()!;
-            const root = new HashTree(NULL_SHA256_HASH);
+            const root = new HashTree(Constants.NULL_SHA256_HASH);
             root.left = a;
             root.right = b;
             a.parent = root;
@@ -133,7 +124,7 @@ class MerkleTree {
 
 export class PandaniteCore{
 
-    static async checkBlockValid(block: any, lastBlockHash: string, lastBlockHeight: number, isSubmitBlock: boolean): Promise<boolean> {
+    static async checkBlockValid(block: any, lastBlockHash: string, lastBlockHeight: number, expectedDifficulty: number, networkTimestamp: number, medianTimestamp: number): Promise<boolean> {
 
         return new Promise<boolean>((resolve, reject) => {
 
@@ -145,25 +136,34 @@ export class PandaniteCore{
 
             // Check transactions size
             const blockTxSize = block.transactions.length;
-            if (blockTxSize > MAX_TRANSACTIONS_PER_BLOCK)
+            if (blockTxSize > Constants.MAX_TRANSACTIONS_PER_BLOCK)
             {
                 reject("Invalid Transaction Count: " + blockTxSize);
             }
 
             // Validate Block Difficulty
-            
-            
-
-
-
+            if (block.difficulty != expectedDifficulty)
+            {
+                reject("Invalid Block Difficulty: " + block.difficulty + ", Expected: " + expectedDifficulty);
+            }
 
             // Validate Block Time
-            if (isSubmitBlock === true && block.id !== 1)
-            {
-
-
-
+            if (block.id !== 1) {
                 
+                // block must be less than 2 hrs into the future from network time
+                const maxTime: number = networkTimestamp + (120 * 60)
+                if (block.timestamp > maxTime)
+                {
+                    reject("Block Timestamp Too Far Into Future");
+                }
+              
+                // block must be after the median timestamp of last 10 blocks
+                if (medianTimestamp > 0) {
+                    if (block.timestamp < medianTimestamp)
+                    {
+                        reject("Block Timestamp Too Old");
+                    }
+                }
             }
 
             // Validate Transactions in Block
@@ -362,7 +362,7 @@ export class PandaniteCore{
     static verifyNonce(block: any): boolean {
         const blockHash = PandaniteCore.getBlockHash(block);
 
-        const usePufferfish = block.id > PUFFERFISH_START_BLOCK;
+        const usePufferfish = block.id > Constants.PUFFERFISH_START_BLOCK;
 
         const target = this.getBlockHash(block);
 
@@ -400,6 +400,43 @@ export class PandaniteCore{
         
         if (remainingBits > 0) return (a[bytes] >> (8 - remainingBits)) === 0;
         else return true;
+    }
+
+    static computeDifficulty(currentDifficulty: number, elapsedTime: number, expectedTime: number): number {
+
+        let newDifficulty: number = currentDifficulty;
+
+        if (elapsedTime > expectedTime) {
+          let k: number = 2;
+          let lastK: number = 1;
+      
+          while (newDifficulty > Constants.MIN_DIFFICULTY) {
+            if (Math.abs(elapsedTime / k - expectedTime) > Math.abs(elapsedTime / lastK - expectedTime)) {
+              break;
+            }
+      
+            newDifficulty--;
+            lastK = k;
+            k *= 2;
+          }
+      
+          return newDifficulty;
+        } else {
+          let k: number = 2;
+          let lastK: number = 1;
+      
+          while (newDifficulty < 254) {
+            if (Math.abs(elapsedTime * k - expectedTime) > Math.abs(elapsedTime * lastK - expectedTime)) {
+              break;
+            }
+      
+            newDifficulty++;
+            lastK = k;
+            k *= 2;
+          }
+      
+          return newDifficulty;
+        }
     }
 
 }

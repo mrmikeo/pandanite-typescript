@@ -3,6 +3,7 @@ import axios from 'axios';
 import * as mongoose from 'mongoose';
 import { transactionSchema, addressSchema, balanceSchema, tokenSchema, blockSchema, peerSchema } from '../models/Model';
 import Big from 'big.js';
+import { Constants} from "./Constants"
 
 const Transaction = mongoose.model('Transaction', transactionSchema);
 const Address = mongoose.model('Address', addressSchema);
@@ -148,7 +149,10 @@ export class PandaniteJobs{
     currentPeer: string;
     downloadedBlocks: Object;
     peerHeights: Object;
+    peerVersions: Object;
     queueProcessor: QueueProcessor<number>;
+    myBlockHeight: number;
+    difficulty: number;
 
     constructor() {
         this.activePeers = [];
@@ -163,10 +167,13 @@ export class PandaniteJobs{
         this.currentPeer = '';
         this.downloadedBlocks = {};
         this.peerHeights = {};
+        this.peerVersions = {};
         this.queueProcessor = new QueueProcessor<number>();
+        this.myBlockHeight = 0;
+        this.difficulty = Constants.MIN_DIFFICULTY;
     }
 
-    public syncPeers() {
+    public async syncPeers(): Promise<void>  {
 
         // start jobs for syncing peers list & blocks
 
@@ -174,32 +181,41 @@ export class PandaniteJobs{
 
             try {
 
-                //console.log(thisPeer + ":" + height);
-                
-                const response = await axios({
-                    url: thisPeer + "/block?blockId=" + height,
-                    method: 'get',
-                    responseType: 'json'
-                });
-    
-                const data = response.data;
-    
-                if (data && data.hash)
+                if (this.peerHeights[thisPeer] >= height)
                 {
-                    this.downloadedBlocks[height] = response.data;
-                    //console.log("Downloaded block #" + height);
+                    //console.log(thisPeer + ":" + height);
+                    
+                    const response = await axios({
+                        url: thisPeer + "/block?blockId=" + height,
+                        method: 'get',
+                        responseType: 'json'
+                    });
+        
+                    const data = response.data;
+        
+                    if (data && data.hash)
+                    {
+                        this.downloadedBlocks[height] = response.data;
+                    }
+                    else
+                    {
+                        const index = this.activePeers.indexOf(thisPeer);
+                        if (index > -1) {
+                            this.activePeers.splice(index, 1);
+                        }
+                        delete this.downloadedBlocks[height];
+                        this.queueProcessor.removeWorker(thisPeer);
+                        this.queueProcessor.enqueue(height);
+                    }
                 }
                 else
                 {
-                    const index = this.activePeers.indexOf(thisPeer);
-                    if (index > -1) {
-                        this.activePeers.splice(index, 1);
-                    }
+
                     delete this.downloadedBlocks[height];
-                    this.queueProcessor.removeWorker(thisPeer);
-                    this.queueProcessor.enqueue(height);
+                    this.queueProcessor.requeue(height);
+
                 }
-    
+
             } catch (e) {
     
                 const index = this.activePeers.indexOf(thisPeer);
@@ -212,7 +228,7 @@ export class PandaniteJobs{
                 this.queueProcessor.enqueue(height);
     
             }
-            
+
         };
 
         // Start the queue processor
@@ -246,33 +262,46 @@ export class PandaniteJobs{
             }
         }, 1000);
 
-    }
-
-    public async checkLocks() {
-
-        // TODO
-
-    }
-
-    public async printPeeringInfo() {
-
-        console.log("----===== Active Peers =====----");
-
         const myHeight = await Block.find().sort({height: -1}).limit(1);
 
         let height = 0;
         if (myHeight.length > 0) height = myHeight[0].height;
 
-        console.log("My BlockHeight: " + height);
+        this.myBlockHeight = height;
 
-        for (let i = 0; i < this.activePeers.length; i++)
-        {
-            console.log(this.activePeers[i] + " - BlockHeight: " + this.peerHeights[this.activePeers[i]]);
-        }
+console.log("My block height is " + height);
+
+        await this.updateDifficulty();
+
+console.log("OK");
 
     }
 
-    public async checkPeers() {
+    public async checkLocks(): Promise<void>  {
+
+        // TODO
+
+    }
+
+    public async printPeeringInfo(): Promise<void>  {
+
+        console.log("----===== Active Peers (" + this.activePeers.length + ") =====----");
+
+        console.log("BlockHeight: " + this.myBlockHeight);
+        console.log("Difficulty: " + this.difficulty);
+
+        for (let i = 0; i < this.activePeers.length; i++)
+        {
+            let thisPeerHeight = this.peerHeights[this.activePeers[i]] || 0;
+            let thisPeerVersion = this.peerVersions[this.activePeers[i]] || 1;
+            console.log(this.activePeers[i] + " - BlockHeight: " + thisPeerHeight + " - Version: " + thisPeerVersion);
+        }
+
+        console.log("-----------------------------------");
+
+    }
+
+    public async checkPeers(): Promise<void>  {
 
         this.checkingPeers = true;
         this.checkPeerLock = Date.now();
@@ -300,12 +329,27 @@ export class PandaniteJobs{
                 try {
 
                     const response = await axios.get(peer + "/block_count");
-
                     const data = response.data;
 
 //console.log(data);
 
                     if (parseInt(data) === 0) throw new Error('Bad Peer');
+
+                    const response2 = await axios.get(peer + "/name");
+                    const data2 = response2.data;
+
+                    if (data2 && data2.version)
+                    {
+                        let splitVersion = data2.version.split(".");
+                        if (parseInt(splitVersion[0]) >= 2)
+                        {
+                            this.peerVersions[peer] = 2;
+                        }
+                    }
+                    else
+                    {
+                        this.peerVersions[peer] = 1;
+                    }
 
                     if (this.activePeers.indexOf(peer) === -1)
                         this.activePeers.push(peer);
@@ -364,7 +408,7 @@ export class PandaniteJobs{
 
     }
 
-    public async findPeers() {
+    public async findPeers(): Promise<void>  {
 
         this.findingPeers = true;
         this.findPeerLock = Date.now();
@@ -430,16 +474,11 @@ export class PandaniteJobs{
 
     }
 
-    public async downloadBlocks() {
+    public async downloadBlocks(): Promise<void>  {
 
         this.downloadingBlocks = true;
 
-        const myHeight = await Block.find().sort({height: -1}).limit(1);
-
-        let height = 0;
-        if (myHeight.length > 0) height = myHeight[0].height;
-
-        let start = height + 1;
+        let start = this.myBlockHeight + 1;
         let end = start + 500;
 
         let maxHeight = 0;
@@ -476,13 +515,11 @@ export class PandaniteJobs{
             
         }
 
-//console.log("Queued " + queuedCount + " new items");
-
         this.downloadingBlocks = false;
 
     }
 
-    public async syncBlocks() {
+    public async syncBlocks(): Promise<void>  {
 
         globalThis.safeToShutDown = false;
         this.syncingBlocks = true;
@@ -493,16 +530,7 @@ export class PandaniteJobs{
         if (dlBlockKeys.length > 0)
         {
 
-            // What is my height?
-
-            const myHeight = await Block.find().sort({height: -1}).limit(1);
-
-            let height = 0;
-            if (myHeight.length > 0) height = myHeight[0].height;
-
-            // Is next height downloaded?
-
-            let nextHeight = height + 1;
+            let nextHeight = this.myBlockHeight + 1;
 
             while (this.downloadedBlocks[nextHeight] && this.downloadedBlocks[nextHeight] !== 'pending')
             {
@@ -525,12 +553,6 @@ export class PandaniteJobs{
             this.queueProcessor.requeue(nextHeight);
 
         }
-        else
-        {
-
-            console.log("syncBlocks: No Blocks Downloaded");
-
-        }
 
         globalThis.safeToShutDown = true;
         this.syncingBlocks = false;
@@ -538,8 +560,7 @@ export class PandaniteJobs{
 
     }
 
-    private async doBlockRollback(height: number)
-    {
+    private async doBlockRollback(height: number): Promise<boolean> {
 
         console.log("Rolling back block #" + height);
 
@@ -568,9 +589,11 @@ export class PandaniteJobs{
 
             await Block.deleteOne({_id: blockInfo._id});
 
+            this.myBlockHeight = height - 1;
+
         } catch (e) {
 
-            // in case of fail above, then we should start over
+            // in case of fail above, then we should start over or at least run a recompute on the chain...
 
             console.log(blockInfo);
 
@@ -587,21 +610,22 @@ export class PandaniteJobs{
 
         }
 
+        await this.updateDifficulty();
+
         return true;
 
     }
 
-    private async importBlock(block: any)
-    {
+    private async importBlock(block: any): Promise<void> {
 
-        const lastBlock = await Block.find().sort({height: -1}).limit(1);
+        const lastBlock = await Block.findOne({height: this.myBlockHeight});
 
         let lastHeight = 0;
         let isValid = false;
 
-        if (lastBlock.length > 0)
+        if (lastBlock)
         {
-            lastHeight = lastBlock[0].height;
+            lastHeight = lastBlock.height;
             let expectedHeight = lastHeight + 1;
 
             if (block.id != expectedHeight)
@@ -609,8 +633,30 @@ export class PandaniteJobs{
                 throw new Error('Invalid Block. Unexpected Height');
             }
 
+            let medianTimestamp = 0;
+            if (this.myBlockHeight > 10) {
+                const times: Array<number> = [];
+
+                // get last 10 blocktimes
+                const tenBlocks = await Block.find({height: {$gt: this.myBlockHeight - 10}});
+                for (let i = 0; i < tenBlocks.length; i++) {
+                  times.push(tenBlocks[i].timestamp);
+                }
+                times.sort((a, b) => a - b);
+            
+                // compute median
+                if (times.length % 2 === 0) {
+                    medianTimestamp = (times[Math.floor(times.length / 2)] + times[Math.floor(times.length / 2) - 1]) / 2;
+                } else {
+                    medianTimestamp = times[Math.floor(times.length / 2)];
+                }
+            
+            }
+
+            let networkTimestamp = Math.round(Date.now()/1000);
+
             try {
-                isValid = await PandaniteCore.checkBlockValid(block, lastBlock[0].blockHash, lastBlock[0].height, false);
+                isValid = await PandaniteCore.checkBlockValid(block, lastBlock.blockHash, lastBlock.height, this.difficulty, networkTimestamp, medianTimestamp);
             } catch (e) {
                 console.log(e);
                 throw new Error(e);
@@ -619,8 +665,11 @@ export class PandaniteJobs{
         else if (block.id === 1)
         {
 
+            let medianTimestamp = 0;
+            let networkTimestamp = Math.round(Date.now()/1000);
+
             try {
-                isValid = await PandaniteCore.checkBlockValid(block, "0000000000000000000000000000000000000000000000000000000000000000", 0, false);
+                isValid = await PandaniteCore.checkBlockValid(block, "0000000000000000000000000000000000000000000000000000000000000000", 0, this.difficulty, networkTimestamp, medianTimestamp);
             } catch (e) {
                 console.log(e);
                 throw new Error(e);
@@ -631,7 +680,14 @@ export class PandaniteJobs{
         if (isValid === true)
         {
 
-            const totalWork = Big(lastBlock[0].totalWork).plus(block.difficulty).toFixed(0);
+            let previousTotalWork = Big(0).toFixed();
+
+            if (lastBlock)
+            {
+                previousTotalWork= lastBlock.totalWork
+            }
+
+            const totalWork = Big(previousTotalWork).plus(block.difficulty).toFixed(0);
 
             // add block to db
 
@@ -729,6 +785,10 @@ export class PandaniteJobs{
 
             await Block.updateOne({_id: blockInfo._id}, {$set: {transactions: blockTx}});
 
+            this.myBlockHeight = block.id;
+
+            await this.updateDifficulty();
+
             console.log("Imported Block #" + block.id);
 
         }
@@ -738,5 +798,41 @@ export class PandaniteJobs{
         }
 
     }
+
+    private async getDbBlock(height: number): Promise<any> {
+        const blockInfo = await Block.findOne({height: height});
+        return blockInfo;
+    }
+
+    private async updateDifficulty(): Promise<void> {
+
+console.log("test1");
+
+        if (this.myBlockHeight <= Constants.DIFFICULTY_LOOKBACK * 2) return;
+        if (this.myBlockHeight % Constants.DIFFICULTY_LOOKBACK !== 0) return;
+console.log("test2");
+        const firstID: number = this.myBlockHeight - Constants.DIFFICULTY_LOOKBACK;
+        const lastID: number = this.myBlockHeight;
+        const first = await this.getDbBlock(firstID);
+        const last = await this.getDbBlock(lastID);
+
+        if (!first || !last) return;
+
+        const elapsed: number = last.timestamp - first.timestamp;
+        const numBlocksElapsed: number = lastID - firstID;
+        const target: number = numBlocksElapsed * Constants.DESIRED_BLOCK_TIME_SEC;
+        const difficulty: number = last.difficulty;
+        this.difficulty = PandaniteCore.computeDifficulty(difficulty, elapsed, target);
+    
+        if (
+          this.myBlockHeight >= Constants.PUFFERFISH_START_BLOCK &&
+          this.myBlockHeight < Constants.PUFFERFISH_START_BLOCK + Constants.DIFFICULTY_LOOKBACK * 2
+        ) {
+          this.difficulty = Constants.MIN_DIFFICULTY;
+        }
+
+        console.log("New Difficulty: " + this.difficulty);
+
+      }
 
 }
