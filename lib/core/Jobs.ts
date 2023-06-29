@@ -4,6 +4,9 @@ import * as mongoose from 'mongoose';
 import { transactionSchema, addressSchema, balanceSchema, tokenSchema, blockSchema, peerSchema } from '../models/Model';
 import Big from 'big.js';
 import { Constants } from "./Constants"
+import * as minimist from 'minimist';
+
+const argv = minimist(process.argv.slice(1));
 
 const Transaction = mongoose.model('Transaction', transactionSchema);
 const Address = mongoose.model('Address', addressSchema);
@@ -176,6 +179,15 @@ export class PandaniteJobs{
     }
 
     public async syncPeers()  {
+
+        if (argv.r == true) // reset chain
+        {
+            await Block.deleteMany();
+            await Transaction.deleteMany();
+            await Balance.deleteMany();
+            await Token.deleteMany();
+            console.log("Chain is reset");
+        }
 
         // start jobs for syncing peers list & blocks
 

@@ -1,11 +1,14 @@
 import app from './app';
 import * as fs from 'fs';
+import * as minimist from 'minimist';
 
-const PORT = 3000;
+const argv = minimist(process.argv.slice(1));
+
+const PORT = argv.port || 3000;
 
 globalThis.appVersion = '2.0.0';
-globalThis.appName = 'Pandanite Node';
-globalThis.networkName = 'mainnet';
+globalThis.appName = argv.name || 'Pandanite Node';
+globalThis.networkName = argv.network || 'mainnet';
 globalThis.defaultPeers = ["http://5.9.151.50:3000","http://65.21.224.171:3000","http://65.21.89.182:3000","http://88.119.169.111:3000"];
 globalThis.shuttingDown = false;
 globalThis.safeToShutdown = true;
