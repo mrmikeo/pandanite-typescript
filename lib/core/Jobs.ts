@@ -6,7 +6,6 @@ import Big from 'big.js';
 import { Constants } from "./Constants"
 import * as minimist from 'minimist';
 import * as WebSocket from 'ws';
-import * as http from 'http';
 
 const Transaction = mongoose.model('Transaction', transactionSchema);
 const Address = mongoose.model('Address', addressSchema);
@@ -204,12 +203,9 @@ export class PandaniteJobs{
             console.log("Peers is reset");
         }
 
-        http.get({'host': 'api.ipify.org', 'port': 80, 'path': '/'}, function(resp) {
-            resp.on('data', function(ip) {
-              console.log("My public IP address is: " + ip);
-              this.myIpAddress = ip;
-            });
-        });
+        const response = await axios.get('http://api.ipify.org/')
+        console.log("My public IP address is: " + response.data);
+        this.myIpAddress = response.data;
 
         // start jobs for syncing peers list & blocks
 
