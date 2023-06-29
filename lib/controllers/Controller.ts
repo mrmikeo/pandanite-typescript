@@ -86,7 +86,7 @@ export class ApiController{
     }
 
     // General statistics
-    public async getStats (req: Request, res: Response) { 
+    public async getStats (req: Request, res: Response) { // Rest API
 
         try {
 
@@ -111,8 +111,40 @@ export class ApiController{
         
     }
 
+    public async getStatsWs (): Promise<any> { // Ws API
+
+        try {
+
+            const response = {
+                current_block: 0,
+                last_block_time: 0,
+                node_version: globalThis.appVersion,
+                num_coins: 0,
+                num_wallets: 0,
+                pending_transactions: 0,
+                transactions_per_second: 0,
+                mempool: []
+            };
+
+            return response;
+
+        } catch (e) {
+
+            const response = {
+                error: {
+                    code: 400,
+                    message: "Unknown error has occurred"
+                }
+            };
+
+            return response;
+
+        }
+        
+    }
+
     // Block details by blockId
-    public async getBlock (req: Request, res: Response) { 
+    public async getBlock(req: Request, res: Response) {  // Rest API
 
         try {
 
@@ -143,7 +175,7 @@ export class ApiController{
                     let thistx = transactions[i];
 
                     blockinfo.transactions.push({
-                        token: thistx.token.transaction,
+                        token: thistx.token?.transaction,
                         amount: thistx.amount,
                         fee: thistx.fee,
                         from: thistx.fromAddress.address,
@@ -161,6 +193,76 @@ export class ApiController{
         } catch (e) {
 
             res.send(e);
+
+        }
+
+    }
+
+    public async getBlockWs(blockId: number): Promise<any> { // Ws API
+
+        try {
+
+            let block = await Block.findOne({height: blockId}); 
+
+            if (!block) 
+            {
+                const response = {
+                    error: {
+                        code: 404,
+                        message: "Block not found"
+                    }
+                };
+                return response;
+            }
+            else
+            {
+
+                let blockinfo = {
+                    difficulty: block.difficulty,
+                    hash: block.hash,
+                    id: block.height,
+                    lastBlockHash: block.lastBlockHash,
+                    merkleRoot: block.merkleRoot,
+                    nonce: block.nonce,
+                    timestamp: block.timestamp,
+                    transactions: []
+                };
+
+                let transactions = await Transaction.find({block: block._id}).populate("fromAddress").populate("toAddress").populate("token"); 
+
+                for (let i = 0; i < transactions.length; i++)
+                {
+                    let thistx = transactions[i];
+
+                    blockinfo.transactions.push({
+                        token: thistx.token?.transaction,
+                        amount: thistx.amount,
+                        fee: thistx.fee,
+                        from: thistx.fromAddress.address,
+                        to: thistx.toAddress.address,
+                        signature: thistx.signature,
+                        signingKey: thistx.signingKey,
+                        timestamp: thistx.timestamp,
+                        txid:  thistx.hash
+                    });
+                }
+
+                return blockinfo;
+
+            }
+
+        } catch (e) {
+
+            console.log(e);
+
+            const response = {
+                error: {
+                    code: 400,
+                    message: "Unknown error has occurred"
+                }
+            };
+
+            return response;
 
         }
 
@@ -240,52 +342,4 @@ export class ApiController{
 
     }
 
-    /*
-    public addNewContact (req: Request, res: Response) {                
-        let newContact = new Contact(req.body);
-    
-        newContact.save((err, contact) => {
-            if(err){
-                res.send(err);
-            }    
-            res.json(contact);
-        });
-    }
-
-    public getContacts (req: Request, res: Response) {           
-        Contact.find({}, (err, contact) => {
-            if(err){
-                res.send(err);
-            }
-            res.json(contact);
-        });
-    }
-
-    public getContactWithID (req: Request, res: Response) {           
-        Contact.findById(req.params.contactId, (err, contact) => {
-            if(err){
-                res.send(err);
-            }
-            res.json(contact);
-        });
-    }
-
-    public updateContact (req: Request, res: Response) {           
-        Contact.findOneAndUpdate({ _id: req.params.contactId }, req.body, { new: true }, (err, contact) => {
-            if(err){
-                res.send(err);
-            }
-            res.json(contact);
-        });
-    }
-
-    public deleteContact (req: Request, res: Response) {           
-        Contact.remove({ _id: req.params.contactId }, (err, contact) => {
-            if(err){
-                res.send(err);
-            }
-            res.json({ message: 'Successfully deleted contact!'});
-        });
-    }
-    */
 }
