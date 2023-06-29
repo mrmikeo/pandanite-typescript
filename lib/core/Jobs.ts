@@ -215,30 +215,91 @@ export class PandaniteJobs{
 
                 if (this.peerHeights[thisPeer] >= height)
                 {
-                    //console.log(thisPeer + ":" + height);
-                    
-                    const response = await axios({
-                        url: thisPeer + "/block?blockId=" + height,
-                        method: 'get',
-                        responseType: 'json'
-                    });
-        
-                    const data = response.data;
-        
-                    if (data && data.hash)
+                    // has blocks we can download
+
+                    // what version is this peer? can we do ws?
+                    if (this.websocketPeers[thisPeer])
                     {
-                        this.downloadedBlocks[height] = response.data;
+
+                        // get block via websocket
+
+                        const messageId = that.stringToHex(thisPeer) + "." + Date.now();
+
+                        const message = {
+                            method: 'getBlock',
+                            blockId: height,
+                            messageId: messageId
+                        };
+
+                        const respFunc = async (peer: string, messageId: string, data: string) => {
+
+                            try {
+
+                                const jsonparse = JSON.parse(data);
+                                const jsondata = jsonparse.data;
+
+console.log("V2 getBlock Result");
+console.log(jsondata);
+
+                                if (jsondata && jsondata.hash)
+                                {
+
+                                    this.downloadedBlocks[height] = jsondata;
+                                    delete this.wsRespFunc[messageId];
+
+                                }
+                                else
+                                {
+                                    //const index = this.activePeers.indexOf(thisPeer);
+                                    //if (index > -1) {
+                                    //    this.activePeers.splice(index, 1);
+                                    //}
+                                    delete this.downloadedBlocks[height];
+                                    //this.queueProcessor.removeWorker(thisPeer);
+                                    this.queueProcessor.requeue(height);
+                                    delete this.wsRespFunc[messageId];
+                                }
+
+                            } catch (e) {
+
+
+                            }
+
+                        };
+
+                        this.wsRespFunc[messageId] = respFunc;
+
+                        this.websocketPeers[thisPeer].send(JSON.stringify(message));
+
                     }
                     else
                     {
-                        const index = this.activePeers.indexOf(thisPeer);
-                        if (index > -1) {
-                            this.activePeers.splice(index, 1);
+                    
+                        const response = await axios({
+                            url: thisPeer + "/block?blockId=" + height,
+                            method: 'get',
+                            responseType: 'json'
+                        });
+            
+                        const data = response.data;
+            
+                        if (data && data.hash)
+                        {
+                            this.downloadedBlocks[height] = response.data;
                         }
-                        delete this.downloadedBlocks[height];
-                        this.queueProcessor.removeWorker(thisPeer);
-                        this.queueProcessor.enqueue(height);
+                        else
+                        {
+                            const index = this.activePeers.indexOf(thisPeer);
+                            if (index > -1) {
+                                this.activePeers.splice(index, 1);
+                            }
+                            delete this.downloadedBlocks[height];
+                            this.queueProcessor.removeWorker(thisPeer);
+                            this.queueProcessor.requeue(height);
+                        }
+
                     }
+
                 }
                 else
                 {
