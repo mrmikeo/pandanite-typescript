@@ -25,22 +25,18 @@ interface ExtWebSocket extends WebSocket {
 }
 
 server.on('upgrade', function upgrade(request, socket, head) {
-
     wss.handleUpgrade(request, socket, head, function done(ws) {
         wss.emit('connection', ws, request);
     });
-
 });
 
 wss.on('connection', function connection(ws) {
     const processor = new WebSocketProcessor(ws);
     processor.startProcessing();
-    ws.send("Connected to " + globalThis.appName + " v" + globalThis.appVersion);
     const extWs = ws as ExtWebSocket;
     extWs.isAlive = true;
     ws.on('error', console.error);
     ws.on('pong', function() {
-        console.log("heartbeat");
         const extWs = this as ExtWebSocket;
         extWs.isAlive = true;
     });

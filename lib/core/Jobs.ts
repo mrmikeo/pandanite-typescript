@@ -6,6 +6,7 @@ import Big from 'big.js';
 import { Constants } from "./Constants"
 import * as minimist from 'minimist';
 import * as WebSocket from 'ws';
+import * as http from 'http';
 
 const Transaction = mongoose.model('Transaction', transactionSchema);
 const Address = mongoose.model('Address', addressSchema);
@@ -159,6 +160,7 @@ export class PandaniteJobs{
     difficulty: number;
     websocketPeers: Object;
     wsRespFunc: Object;
+    myIpAddress: string;
 
     constructor() {
         this.activePeers = [];
@@ -179,6 +181,7 @@ export class PandaniteJobs{
         this.difficulty = 16;
         this.websocketPeers = {}; // v2 peers only
         this.wsRespFunc = {}; // v2 peers only
+        this.myIpAddress = "127.0.0.1";
     }
 
     public async syncPeers()  {
@@ -191,8 +194,22 @@ export class PandaniteJobs{
             await Transaction.deleteMany();
             await Balance.deleteMany();
             await Token.deleteMany();
+            await Peer.deleteMany();
             console.log("Chain is reset");
         }
+
+        if (argv.resetpeers === true) // reset chain
+        {
+            await Peer.deleteMany();
+            console.log("Peers is reset");
+        }
+
+        http.get({'host': 'api.ipify.org', 'port': 80, 'path': '/'}, function(resp) {
+            resp.on('data', function(ip) {
+              console.log("My public IP address is: " + ip);
+              this.myIpAddress = ip;
+            });
+        });
 
         // start jobs for syncing peers list & blocks
 
@@ -393,9 +410,9 @@ console.log(jsondata);
         
                                 that.peerHeights[peer] = parseInt(jsondata.current_block);
         
-                                const havePeer = await Peer.findOne({url: peer});
+                                const havePeer = await Peer.countDocuments({url: peer});
         
-                                if (!havePeer)
+                                if (havePeer == 0)
                                 {
         
                                     let stripPeer = peer.replace('http://', '');
@@ -412,6 +429,24 @@ console.log(jsondata);
                                         updatedAt: Date.now()
                                     });
         
+                                }
+                                else if (havePeer > 1)
+                                {
+                                    await Peer.deleteMany({url: peer});
+
+                                    let stripPeer = peer.replace('http://', '');
+                                    let splitPeer = stripPeer.split(":");
+        
+                                    await Peer.create({
+                                        url: peer,
+                                        ipAddress: splitPeer[0],
+                                        port: splitPeer[1],
+                                        lastSeen: Date.now(),
+                                        isActive: true,
+                                        lastHeight: parseInt(jsondata.current_block),
+                                        createdAt: Date.now(),
+                                        updatedAt: Date.now()
+                                    });
                                 }
                                 else
                                 {
@@ -447,11 +482,11 @@ console.log(e);
                         const client = new WebSocket(peer.replace("http://", "ws://"));
                         client.onopen = function() {
 
-                            this.websocketPeers[peer] = this;
+                            that.websocketPeers[peer] = this;
 
                             // get stats
 
-                            const messageId = this.stringToHex(peer) + "." + Date.now();
+                            const messageId = that.stringToHex(peer) + "." + Date.now();
 
                             const message = {
                                 method: 'getStats',
@@ -477,9 +512,9 @@ console.log(jsondata);
             
                                     that.peerHeights[peer] = parseInt(jsondata.current_block);
             
-                                    const havePeer = await Peer.findOne({url: peer});
-            
-                                    if (!havePeer)
+                                    const havePeer = await Peer.countDocuments({url: peer});
+        
+                                    if (havePeer == 0)
                                     {
             
                                         let stripPeer = peer.replace('http://', '');
@@ -496,6 +531,24 @@ console.log(jsondata);
                                             updatedAt: Date.now()
                                         });
             
+                                    }
+                                    else if (havePeer > 1)
+                                    {
+                                        await Peer.deleteMany({url: peer});
+    
+                                        let stripPeer = peer.replace('http://', '');
+                                        let splitPeer = stripPeer.split(":");
+            
+                                        await Peer.create({
+                                            url: peer,
+                                            ipAddress: splitPeer[0],
+                                            port: splitPeer[1],
+                                            lastSeen: Date.now(),
+                                            isActive: true,
+                                            lastHeight: parseInt(jsondata.current_block),
+                                            createdAt: Date.now(),
+                                            updatedAt: Date.now()
+                                        });
                                     }
                                     else
                                     {
@@ -530,7 +583,7 @@ console.log(e);
                                 if (that.wsRespFunc[jsondata.messageId])
                                 {
 
-                                    that.wsRespFunc[jsondata.messageId](peer, jsondata.messageId. data.toString());
+                                    that.wsRespFunc[jsondata.messageId](peer, jsondata.messageId, data.toString());
 
                                 }
 
@@ -561,6 +614,8 @@ console.log(e);
 
                             }
 
+                            delete that.websocketPeers[peer];
+
                         });
 
                     } catch (e) {
@@ -575,78 +630,90 @@ console.log(e);
             else // PEER VERSION 1
             {
 
-                if (["http://localhost:3000", "http://127.0.0.1:3000"].indexOf(peer) == -1)
-                {
+                try {
 
-                    try {
+                    const response = await axios.get(peer + "/stats");
+                    const data = response.data;
 
-                        const response = await axios.get(peer + "/stats");
-                        const data = response.data;
+                    if (!data || parseInt(data.current_block) === 0) throw new Error('Bad Peer');
 
-                        if (!data || parseInt(data.current_block) === 0) throw new Error('Bad Peer');
-
-                        if (data && data.node_version)
+                    if (data && data.node_version)
+                    {
+                        let splitVersion = data.node_version.split(".");
+                        if (parseInt(splitVersion[0]) >= 2)
                         {
-                            let splitVersion = data.node_version.split(".");
-                            if (parseInt(splitVersion[0]) >= 2)
-                            {
-                                this.peerVersions[peer] = 2;
-                            }
+                            this.peerVersions[peer] = 2;
                         }
-                        else
-                        {
-                            this.peerVersions[peer] = 1;
-                        }
-
-                        if (this.activePeers.indexOf(peer) === -1)
-                            this.activePeers.push(peer);
-
-                        this.peerHeights[peer] = parseInt(data.current_block);
-
-                        const havePeer = await Peer.findOne({url: peer});
-
-                        if (!havePeer)
-                        {
-
-                            let stripPeer = peer.replace('http://', '');
-                            let splitPeer = stripPeer.split(":");
-
-                            await Peer.create({
-                                url: peer,
-                                ipAddress: splitPeer[0],
-                                port: splitPeer[1],
-                                lastSeen: Date.now(),
-                                isActive: true,
-                                lastHeight: parseInt(data.current_block),
-                                createdAt: Date.now(),
-                                updatedAt: Date.now()
-                            });
-
-                        }
-                        else
-                        {
-                            await Peer.updateOne({url: peer}, {$set: {
-                                lastSeen: Date.now(),
-                                isActive: true,
-                                lastHeight: parseInt(data.current_block),
-                                updatedAt: Date.now()
-                            }});
-                        }
-                        
-
-                    } catch (e) {
-                        
-                        // peer timeout or some other issue
-
-                        const index = this.activePeers.indexOf(peer);
-                        if (index > -1) {
-                            this.activePeers.splice(index, 1)
-                        }
-
-                        await Peer.updateOne({url: peer}, {$set: {isActive: false}});
-                        
+                    }
+                    else
+                    {
+                        this.peerVersions[peer] = 1;
                     }
 
+                    if (this.activePeers.indexOf(peer) === -1)
+                        this.activePeers.push(peer);
+
+                    this.peerHeights[peer] = parseInt(data.current_block);
+
+                    const havePeer = await Peer.countDocuments({url: peer});
+    
+                    if (havePeer == 0)
+                    {
+
+                        let stripPeer = peer.replace('http://', '');
+                        let splitPeer = stripPeer.split(":");
+
+                        await Peer.create({
+                            url: peer,
+                            ipAddress: splitPeer[0],
+                            port: splitPeer[1],
+                            lastSeen: Date.now(),
+                            isActive: true,
+                            lastHeight: parseInt(data.current_block),
+                            createdAt: Date.now(),
+                            updatedAt: Date.now()
+                        });
+
+                    }
+                    else if (havePeer > 1)
+                    {
+                        await Peer.deleteMany({url: peer});
+
+                        let stripPeer = peer.replace('http://', '');
+                        let splitPeer = stripPeer.split(":");
+
+                        await Peer.create({
+                            url: peer,
+                            ipAddress: splitPeer[0],
+                            port: splitPeer[1],
+                            lastSeen: Date.now(),
+                            isActive: true,
+                            lastHeight: parseInt(data.current_block),
+                            createdAt: Date.now(),
+                            updatedAt: Date.now()
+                        });
+                    }
+                    else
+                    {
+                        await Peer.updateOne({url: peer}, {$set: {
+                            lastSeen: Date.now(),
+                            isActive: true,
+                            lastHeight: parseInt(data.current_block),
+                            updatedAt: Date.now()
+                        }});
+                    }                        
+
+                } catch (e) {
+
+                    // peer timeout or some other issue
+
+                    const index = this.activePeers.indexOf(peer);
+                    if (index > -1) {
+                        this.activePeers.splice(index, 1)
+                    }
+
+                    await Peer.updateOne({url: peer}, {$set: {isActive: false}});
+                    
                 }
 
             }
@@ -688,25 +755,30 @@ console.log(e);
 
                         let thisPeer = data[i];
 
-                        let havePeer = await Peer.findOne({url: thisPeer});
+                        let stripPeer = thisPeer.replace('http://', '');
+                        let splitPeer = stripPeer.split(":");
 
-                        if (!havePeer)
+                        if (["localhost", "127.0.0.1", this.myIpAddress].indexOf(splitPeer[0]) == -1) // don't peer with yourself.
                         {
-    
-                            let stripPeer = thisPeer.replace('http://', '');
-                            let splitPeer = stripPeer.split(":");
-    
-                            await Peer.create({
-                                url: peer,
-                                ipAddress: splitPeer[0],
-                                port: splitPeer[1],
-                                lastSeen: 0,
-                                isActive: true,
-                                lastHeight: 0,
-                                createdAt: Date.now(),
-                                updatedAt: Date.now()
-                            });
-    
+
+                            let havePeer = await Peer.countDocuments({url: thisPeer});
+
+                            if (havePeer == 0)
+                            {
+
+                                await Peer.create({
+                                    url: peer,
+                                    ipAddress: splitPeer[0],
+                                    port: splitPeer[1],
+                                    lastSeen: 0,
+                                    isActive: true,
+                                    lastHeight: 0,
+                                    createdAt: Date.now(),
+                                    updatedAt: Date.now()
+                                });
+        
+                            }
+
                         }
 
                     }
