@@ -6,6 +6,7 @@ import Big from 'big.js';
 import { Constants } from "./Constants"
 import * as minimist from 'minimist';
 import * as WebSocket from 'ws';
+import { v4 as uuidv4 } from 'uuid';
 
 const Transaction = mongoose.model('Transaction', transactionSchema);
 const Address = mongoose.model('Address', addressSchema);
@@ -225,7 +226,7 @@ export class PandaniteJobs{
 
                         // get block via websocket
 
-                        const messageId = that.stringToHex(thisPeer) + "." + Date.now() + Math.random();
+                        const messageId = that.stringToHex(thisPeer) + "." + uuidv4();
 
                         const message = {
                             method: 'getBlock',
@@ -233,7 +234,7 @@ export class PandaniteJobs{
                             messageId: messageId
                         };
 
-                        const respFunc = async (peer: string, messageId: string, data: string) => {
+                        this.wsRespFunc[messageId] = (peer: string, messageId: string, data: string) => {
 
                             try {
 
@@ -265,8 +266,6 @@ export class PandaniteJobs{
                             }
 
                         };
-
-                        this.wsRespFunc[messageId] = respFunc;
 
                         this.websocketPeers[thisPeer].send(JSON.stringify(message));
 
@@ -442,14 +441,14 @@ console.log("Last diff height is " + lastDiffHeight);
                         {
                             
                             // get stats
-                            const messageId = this.stringToHex(peer) + "." + Date.now() + Math.random();;
+                            const messageId = this.stringToHex(peer) + "." + uuidv4();
 
                             const message = {
                                 method: 'getStats',
                                 messageId: messageId
                             };
 
-                            let respFunc = async (peer: string, messageId: string, data: string) => {
+                            this.wsRespFunc[messageId] = async (peer: string, messageId: string, data: string) => {
 
                                 try {
 
@@ -522,8 +521,6 @@ console.log(e);
 
                             };
 
-                            this.wsRespFunc[messageId] = respFunc;
-
                             this.websocketPeers[peer].send(JSON.stringify(message));
                             
                         }
@@ -541,14 +538,14 @@ console.log(e);
 
                                 // get stats
 
-                                const messageId = that.stringToHex(peer) + "." + Date.now() + Math.random();
+                                const messageId = that.stringToHex(peer) + "." + uuidv4();
 
                                 const message = {
                                     method: 'getStats',
                                     messageId: messageId
                                 };
 
-                                const respFunc = async (peer: string, messageId: string, data: string) => {
+                                that.wsRespFunc[messageId] = async (peer: string, messageId: string, data: string) => {
 
                                     try {
 
@@ -620,8 +617,6 @@ console.log(e);
                                     }
 
                                 };
-
-                                that.wsRespFunc[messageId] = respFunc;
 
                                 this.send(JSON.stringify(message));
 
@@ -920,10 +915,12 @@ console.log(e);
                 const data = this.downloadedBlocks[nextHeight];
 
                 try {
+                    console.log("Try import block: " + nextHeight)
                     await this.importBlock(data);
                     delete this.downloadedBlocks[nextHeight];
                     nextHeight++;
                 } catch (e) {
+                    console.log(data);
                     console.log(e);
                     delete this.downloadedBlocks[nextHeight];
                     const previousHeight = nextHeight - 1;
@@ -1136,7 +1133,7 @@ console.log(e);
                     token: null,
                     fee: thisTx.fee,
                     isGenerate: thisTx.from===""?true:false,
-                    timestamp: thisTx.timestamp,
+                    nonce: thisTx.timestamp,
                     signingKey: thisTx.signingKey,
                     block: blockInfo._id,
                     blockIndex: i,

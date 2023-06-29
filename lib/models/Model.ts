@@ -33,8 +33,8 @@ export const transactionSchema = new Schema({
         type: Boolean,
         defaultsTo: false
     },
-    timestamp: {
-        type: Number
+    nonce: {
+        type: String
     },
     signingKey: {
         type: String

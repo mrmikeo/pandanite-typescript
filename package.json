@@ -40,10 +40,12 @@
     "node-addon-api": "^7.0.0",
     "nodemon": "^2.0.22",
     "underscore": "^1.13.6",
+    "uuid": "^9.0.0",
     "ws": "^8.13.0"
   },
   "devDependencies": {
     "@types/minimist": "^1.2.2",
+    "@types/uuid": "^9.0.2",
     "@types/ws": "^8.5.5",
     "node-gyp": "^9.4.0",
     "ts-node": "^10.9.1",

@@ -229,7 +229,8 @@ export class ApiController{
                         to: thistx.toAddress.address,
                         signature: thistx.signature,
                         signingKey: thistx.signingKey,
-                        timestamp: thistx.timestamp,
+                        timestamp: thistx.nonce,
+                        nonce: thistx.nonce,
                         txid:  thistx.hash
                     });
                 }
@@ -289,7 +290,8 @@ export class ApiController{
                         to: thistx.toAddress.address,
                         signature: thistx.signature,
                         signingKey: thistx.signingKey,
-                        timestamp: thistx.timestamp,
+                        timestamp: thistx.nonce,
+                        nonce: thistx.nonce,
                         txid:  thistx.hash
                     });
                 }
