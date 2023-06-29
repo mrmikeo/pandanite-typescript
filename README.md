@@ -38,3 +38,13 @@ Run in production mode
 npm run prod
 ```
 
+## Available CLI arguments
+
+-r :: reset chain
+-port 3000 :: set port to 3000
+-name test :: set node name to test
+-network mainnet :: set node network to mainnet
+
+Usage:
+```
+npm run dev -- -port 3000 -name test
