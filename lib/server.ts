@@ -14,6 +14,8 @@ globalThis.safeToShutdown = true;
 process.on('SIGINT', function() {
 
 	globalThis.shuttingDown = true;
+
+console.log("caught sigint")
 	
 	return new Promise((resolve, reject) => {
     

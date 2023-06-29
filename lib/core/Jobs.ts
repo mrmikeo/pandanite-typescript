@@ -3,7 +3,7 @@ import axios from 'axios';
 import * as mongoose from 'mongoose';
 import { transactionSchema, addressSchema, balanceSchema, tokenSchema, blockSchema, peerSchema } from '../models/Model';
 import Big from 'big.js';
-import { Constants} from "./Constants"
+import { Constants } from "./Constants"
 
 const Transaction = mongoose.model('Transaction', transactionSchema);
 const Address = mongoose.model('Address', addressSchema);
@@ -11,6 +11,8 @@ const Balance = mongoose.model('Balance', balanceSchema);
 const Token = mongoose.model('Token', tokenSchema);
 const Block = mongoose.model('Block', blockSchema);
 const Peer = mongoose.model('Peer', peerSchema);
+
+axios.defaults.timeout === 3000;
 
 class AsyncQueue<T> {
     private queue: T[];
@@ -170,10 +172,10 @@ export class PandaniteJobs{
         this.peerVersions = {};
         this.queueProcessor = new QueueProcessor<number>();
         this.myBlockHeight = 0;
-        this.difficulty = Constants.MIN_DIFFICULTY;
+        this.difficulty = 16;
     }
 
-    public async syncPeers(): Promise<void>  {
+    public async syncPeers()  {
 
         // start jobs for syncing peers list & blocks
 
@@ -234,6 +236,21 @@ export class PandaniteJobs{
         // Start the queue processor
         this.queueProcessor.addFunction(workerFunction);
 
+        const myHeight = await Block.find().sort({height: -1}).limit(1);
+
+        let height = 0;
+        if (myHeight.length > 0) height = myHeight[0].height;
+
+        this.myBlockHeight = height;
+
+console.log("My block height is " + height);
+
+        const lastDiffHeight = Math.floor(height/Constants.DIFFICULTY_LOOKBACK)*Constants.DIFFICULTY_LOOKBACK;
+
+console.log("Last diff height is " + lastDiffHeight);
+
+        await this.updateDifficultyForHeight(lastDiffHeight);
+
         this.checkPeers();
 
         let that = this;
@@ -262,28 +279,15 @@ export class PandaniteJobs{
             }
         }, 1000);
 
-        const myHeight = await Block.find().sort({height: -1}).limit(1);
-
-        let height = 0;
-        if (myHeight.length > 0) height = myHeight[0].height;
-
-        this.myBlockHeight = height;
-
-console.log("My block height is " + height);
-
-        await this.updateDifficulty();
-
-console.log("OK");
-
     }
 
-    public async checkLocks(): Promise<void>  {
+    public async checkLocks() {
 
         // TODO
 
     }
 
-    public async printPeeringInfo(): Promise<void>  {
+    public async printPeeringInfo() {
 
         console.log("----===== Active Peers (" + this.activePeers.length + ") =====----");
 
@@ -299,9 +303,11 @@ console.log("OK");
 
         console.log("-----------------------------------");
 
+        return true;
+
     }
 
-    public async checkPeers(): Promise<void>  {
+    public async checkPeers()  {
 
         this.checkingPeers = true;
         this.checkPeerLock = Date.now();
@@ -320,27 +326,21 @@ console.log("OK");
             this.pendingPeers = globalThis.defaultPeers;
         }
 
-        this.pendingPeers.forEach(peer => {
+        this.pendingPeers.forEach(async (peer) => {
 
-//console.log(peer);
-
-            (async () => {
+            if (["http://localhost:3000", "http://127.0.0.1:3000"].indexOf(peer) == -1)
+            {
 
                 try {
 
-                    const response = await axios.get(peer + "/block_count");
+                    const response = await axios.get(peer + "/stats");
                     const data = response.data;
 
-//console.log(data);
+                    if (!data || parseInt(data.current_block) === 0) throw new Error('Bad Peer');
 
-                    if (parseInt(data) === 0) throw new Error('Bad Peer');
-
-                    const response2 = await axios.get(peer + "/name");
-                    const data2 = response2.data;
-
-                    if (data2 && data2.version)
+                    if (data && data.node_version)
                     {
-                        let splitVersion = data2.version.split(".");
+                        let splitVersion = data.node_version.split(".");
                         if (parseInt(splitVersion[0]) >= 2)
                         {
                             this.peerVersions[peer] = 2;
@@ -354,7 +354,7 @@ console.log("OK");
                     if (this.activePeers.indexOf(peer) === -1)
                         this.activePeers.push(peer);
 
-                    this.peerHeights[peer] = parseInt(data);
+                    this.peerHeights[peer] = parseInt(data.current_block);
 
                     let havePeer = await Peer.findOne({url: peer});
 
@@ -370,7 +370,7 @@ console.log("OK");
                             port: splitPeer[1],
                             lastSeen: Date.now(),
                             isActive: true,
-                            lastHeight: parseInt(data),
+                            lastHeight: parseInt(data.current_block),
                             createdAt: Date.now(),
                             updatedAt: Date.now()
                         });
@@ -381,14 +381,14 @@ console.log("OK");
                         await Peer.updateOne({url: peer}, {$set: {
                             lastSeen: Date.now(),
                             isActive: true,
-                            lastHeight: parseInt(data),
+                            lastHeight: parseInt(data.current_block),
                             updatedAt: Date.now()
                         }});
                     }
                     
 
                 } catch (e) {
-                    // peer timeout
+                    // peer timeout or some other issue
 
                     const index = this.activePeers.indexOf(peer);
                     if (index > -1) {
@@ -399,16 +399,18 @@ console.log("OK");
                     
                 }
 
-            })();
+            }
 
         });
 
         this.checkingPeers = false;
         this.checkPeerLock = 0;
 
+        return true;
+
     }
 
-    public async findPeers(): Promise<void>  {
+    public async findPeers()  {
 
         this.findingPeers = true;
         this.findPeerLock = Date.now();
@@ -472,9 +474,11 @@ console.log("OK");
         this.findingPeers = false;
         this.findPeerLock = 0;
 
+        return true;
+
     }
 
-    public async downloadBlocks(): Promise<void>  {
+    public async downloadBlocks()  {
 
         this.downloadingBlocks = true;
 
@@ -517,9 +521,11 @@ console.log("OK");
 
         this.downloadingBlocks = false;
 
+        return true;
+
     }
 
-    public async syncBlocks(): Promise<void>  {
+    public async syncBlocks()  {
 
         globalThis.safeToShutDown = false;
         this.syncingBlocks = true;
@@ -546,11 +552,11 @@ console.log("OK");
                     delete this.downloadedBlocks[nextHeight];
                     const previousHeight = nextHeight - 1;
                     await this.doBlockRollback(previousHeight);
+                    this.queueProcessor.requeue(nextHeight);
+                    break;
                 }
                 
             }
-
-            this.queueProcessor.requeue(nextHeight);
 
         }
 
@@ -558,65 +564,73 @@ console.log("OK");
         this.syncingBlocks = false;
         this.syncBlocksLock = 0;
 
-    }
-
-    private async doBlockRollback(height: number): Promise<boolean> {
-
-        console.log("Rolling back block #" + height);
-
-        const blockInfo = await Block.findOne({height: height}).populate("transactions");
-
-        try {
-
-            for (let i = 0; i < blockInfo.transactions.length; i++)
-            {
-
-                const thisTx = blockInfo.transactions[i];
-
-                let fromAddress = await Address.findOne({_id: thisTx.fromAddress});
-
-                if (fromAddress.address !== "00000000000000000000000000000000000000000000000000" && fromAddress.address !== "")
-                {
-                    await Balance.updateOne({address: thisTx.fromAddress, token: null}, {$inc: {balance: thisTx.amount}});
-                }
-
-                const numbernegative = thisTx.amount * -1;
-                await Balance.updateOne({address: thisTx.toAddress, token: null}, {$inc: {balance: numbernegative}});
-
-                await Transaction.deleteOne({_id: thisTx._id});
-
-            }
-
-            await Block.deleteOne({_id: blockInfo._id});
-
-            this.myBlockHeight = height - 1;
-
-        } catch (e) {
-
-            // in case of fail above, then we should start over or at least run a recompute on the chain...
-
-            console.log(blockInfo);
-
-            console.log(e);
-
-            console.log("Caught error on rollback.  EXIT")
-
-            process.exit(-1);
-
-            //await Block.deleteMany();
-            //await Transaction.deleteMany();
-            //await Balance.deleteMany();
-            //await Token.deleteMany();
-
-        }
-
-        await this.updateDifficulty();
-
         return true;
 
     }
 
-    private async importBlock(block: any): Promise<void> {
+    private async doBlockRollback(height: number): Promise<boolean> {
+
+        return new Promise<boolean>(async (resolve, reject) => {
+
+            console.log("Rolling back block #" + height);
+
+            const blockInfo = await Block.findOne({height: height}).populate("transactions");
+
+            try {
+
+                for (let i = 0; i < blockInfo.transactions.length; i++)
+                {
+
+                    const thisTx = blockInfo.transactions[i];
+
+                    let fromAddress = await Address.findOne({_id: thisTx.fromAddress});
+
+                    if (fromAddress.address !== "00000000000000000000000000000000000000000000000000" && fromAddress.address !== "")
+                    {
+                        await Balance.updateOne({address: thisTx.fromAddress, token: null}, {$inc: {balance: thisTx.amount}});
+                    }
+
+                    const numbernegative = thisTx.amount * -1;
+                    await Balance.updateOne({address: thisTx.toAddress, token: null}, {$inc: {balance: numbernegative}});
+
+                    await Transaction.deleteOne({_id: thisTx._id});
+
+                }
+
+                await Block.deleteOne({_id: blockInfo._id});
+
+                this.myBlockHeight = height - 1;
+
+                const lastDiffHeight = Math.floor(this.myBlockHeight/Constants.DIFFICULTY_LOOKBACK)*Constants.DIFFICULTY_LOOKBACK;
+
+                await this.updateDifficultyForHeight(lastDiffHeight);
+    
+                resolve(true);
+
+            } catch (e) {
+
+                // in case of fail above, then we should start over or at least run a recompute on the chain...
+
+                console.log(blockInfo);
+
+                console.log(e);
+
+                console.log("Caught error on rollback.  EXIT")
+
+                process.exit(-1);
+
+                //await Block.deleteMany();
+                //await Transaction.deleteMany();
+                //await Balance.deleteMany();
+                //await Token.deleteMany();
+
+            }
+
+        });
+
+    }
+
+    private async importBlock(block: any) {
 
         const lastBlock = await Block.findOne({height: this.myBlockHeight});
 
@@ -638,12 +652,12 @@ console.log("OK");
                 const times: Array<number> = [];
 
                 // get last 10 blocktimes
-                const tenBlocks = await Block.find({height: {$gt: this.myBlockHeight - 10}});
+                const tenBlocks = await Block.find({height: {$gt: this.myBlockHeight - 10}}).sort({height: -1});
                 for (let i = 0; i < tenBlocks.length; i++) {
-                  times.push(tenBlocks[i].timestamp);
+                  times.push(parseInt(tenBlocks[i].timestamp));
                 }
                 times.sort((a, b) => a - b);
-            
+
                 // compute median
                 if (times.length % 2 === 0) {
                     medianTimestamp = (times[Math.floor(times.length / 2)] + times[Math.floor(times.length / 2) - 1]) / 2;
@@ -661,6 +675,7 @@ console.log("OK");
                 console.log(e);
                 throw new Error(e);
             }
+
         }
         else if (block.id === 1)
         {
@@ -791,6 +806,8 @@ console.log("OK");
 
             console.log("Imported Block #" + block.id);
 
+            return true;
+
         }
         else
         {
@@ -799,22 +816,15 @@ console.log("OK");
 
     }
 
-    private async getDbBlock(height: number): Promise<any> {
-        const blockInfo = await Block.findOne({height: height});
-        return blockInfo;
-    }
-
-    private async updateDifficulty(): Promise<void> {
-
-console.log("test1");
+    private async updateDifficulty() {
 
         if (this.myBlockHeight <= Constants.DIFFICULTY_LOOKBACK * 2) return;
         if (this.myBlockHeight % Constants.DIFFICULTY_LOOKBACK !== 0) return;
-console.log("test2");
+
         const firstID: number = this.myBlockHeight - Constants.DIFFICULTY_LOOKBACK;
         const lastID: number = this.myBlockHeight;
-        const first = await this.getDbBlock(firstID);
-        const last = await this.getDbBlock(lastID);
+        const first = await Block.findOne({height: firstID});
+        const last = await Block.findOne({height: lastID});
 
         if (!first || !last) return;
 
@@ -833,6 +843,38 @@ console.log("test2");
 
         console.log("New Difficulty: " + this.difficulty);
 
-      }
+        return true;
 
+    }
+
+    private async updateDifficultyForHeight(height: number) {
+
+        if (height <= Constants.DIFFICULTY_LOOKBACK * 2) return;
+        if (height % Constants.DIFFICULTY_LOOKBACK !== 0) return;
+
+        const firstID: number = height - Constants.DIFFICULTY_LOOKBACK;
+        const lastID: number = height;
+        const first = await Block.findOne({height: firstID});
+        const last = await Block.findOne({height: lastID});
+
+        if (!first || !last) return;
+
+        const elapsed: number = last.timestamp - first.timestamp;
+        const numBlocksElapsed: number = lastID - firstID;
+        const target: number = numBlocksElapsed * Constants.DESIRED_BLOCK_TIME_SEC;
+        const difficulty: number = last.difficulty;
+        this.difficulty = PandaniteCore.computeDifficulty(difficulty, elapsed, target);
+    
+        if (
+            height >= Constants.PUFFERFISH_START_BLOCK &&
+            height < Constants.PUFFERFISH_START_BLOCK + Constants.DIFFICULTY_LOOKBACK * 2
+        ) {
+            this.difficulty = Constants.MIN_DIFFICULTY;
+        }
+
+        console.log("New Difficulty: " + this.difficulty);
+
+        return true;
+
+    }
 }
