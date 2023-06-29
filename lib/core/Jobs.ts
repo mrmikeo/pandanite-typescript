@@ -5,6 +5,7 @@ import { transactionSchema, addressSchema, balanceSchema, tokenSchema, blockSche
 import Big from 'big.js';
 import { Constants } from "./Constants"
 import * as minimist from 'minimist';
+import * as WebSocket from 'ws';
 
 const Transaction = mongoose.model('Transaction', transactionSchema);
 const Address = mongoose.model('Address', addressSchema);
@@ -156,6 +157,8 @@ export class PandaniteJobs{
     queueProcessor: QueueProcessor<number>;
     myBlockHeight: number;
     difficulty: number;
+    websocketPeers: Object;
+    wsRespFunc: Object;
 
     constructor() {
         this.activePeers = [];
@@ -174,6 +177,8 @@ export class PandaniteJobs{
         this.queueProcessor = new QueueProcessor<number>();
         this.myBlockHeight = 0;
         this.difficulty = 16;
+        this.websocketPeers = {}; // v2 peers only
+        this.wsRespFunc = {}; // v2 peers only
     }
 
     public async syncPeers()  {
@@ -299,6 +304,15 @@ console.log("Last diff height is " + lastDiffHeight);
 
     }
 
+    public stringToHex(str: string) {
+        let hexString = '';
+        for (let i = 0; i < str.length; i++) {
+          const hex = str.charCodeAt(i).toString(16);
+          hexString += hex.padStart(2, '0');
+        }
+        return hexString;
+    }
+
     public async printPeeringInfo() {
 
         console.log("----===== Active Peers (" + this.activePeers.length + ") =====----");
@@ -323,8 +337,9 @@ console.log("Last diff height is " + lastDiffHeight);
 
         this.checkingPeers = true;
         this.checkPeerLock = Date.now();
+        const that = this;
 
-        let peerList = await Peer.find({isActive: true});
+        const peerList = await Peer.find({isActive: true});
 
         for (let i = 0; i < peerList.length; i++)
         {
@@ -340,75 +355,298 @@ console.log("Last diff height is " + lastDiffHeight);
 
         this.pendingPeers.forEach(async (peer) => {
 
-            if (["http://localhost:3000", "http://127.0.0.1:3000"].indexOf(peer) == -1)
+            if (this.peerVersions[peer] === 2) // PEER VERSION 2
             {
 
-                try {
-
-                    const response = await axios.get(peer + "/stats");
-                    const data = response.data;
-
-                    if (!data || parseInt(data.current_block) === 0) throw new Error('Bad Peer');
-
-                    if (data && data.node_version)
+                // Known peer of version 2
+                if (this.websocketPeers[peer])
+                {
+                    // check if websocket is still open
+                    if (this.websocketPeers[peer].readyState === WebSocket.OPEN)
                     {
-                        let splitVersion = data.node_version.split(".");
-                        if (parseInt(splitVersion[0]) >= 2)
-                        {
-                            this.peerVersions[peer] = 2;
+                        
+                        // get stats
+
+                        const messageId = this.stringToHex(peer) + "." + Date.now();
+
+                        const message = {
+                            method: 'getStats',
+                            messageId: messageId
+                        };
+
+                        let respFunc = async (peer: string, messageId: string, data: string) => {
+
+                            try {
+
+                                const jsonparse = JSON.parse(data);
+                                const jsondata = jsonparse.data;
+
+console.log("V2 getStats Result");
+console.log(jsondata);
+
+                                if (!jsondata || parseInt(jsondata.current_block) === 0) throw new Error('Bad Peer');
+
+                                that.peerVersions[peer] = 2; // assumed since this is ws
+        
+                                if (that.activePeers.indexOf(peer) === -1)
+                                    that.activePeers.push(peer);
+        
+                                that.peerHeights[peer] = parseInt(jsondata.current_block);
+        
+                                const havePeer = await Peer.findOne({url: peer});
+        
+                                if (!havePeer)
+                                {
+        
+                                    let stripPeer = peer.replace('http://', '');
+                                    let splitPeer = stripPeer.split(":");
+        
+                                    await Peer.create({
+                                        url: peer,
+                                        ipAddress: splitPeer[0],
+                                        port: splitPeer[1],
+                                        lastSeen: Date.now(),
+                                        isActive: true,
+                                        lastHeight: parseInt(jsondata.current_block),
+                                        createdAt: Date.now(),
+                                        updatedAt: Date.now()
+                                    });
+        
+                                }
+                                else
+                                {
+                                    await Peer.updateOne({url: peer}, {$set: {
+                                        lastSeen: Date.now(),
+                                        isActive: true,
+                                        lastHeight: parseInt(jsondata.current_block),
+                                        updatedAt: Date.now()
+                                    }});
+                                }
+
+                                delete that.wsRespFunc[messageId];
+
+                            } catch (e) {
+console.log(e);
+                                delete that.wsRespFunc[messageId];
+                            }
+
+                        };
+
+                        this.wsRespFunc[messageId] = respFunc;
+
+                        this.websocketPeers[peer].send(JSON.stringify(message));
+                        
+                    }
+
+                }
+                else
+                {
+                    // Try to connect socket
+                    try {
+
+                        const client = new WebSocket(peer.replace("http://", "ws://"));
+                        client.onopen = function() {
+
+                            this.websocketPeers[peer] = this;
+
+                            // get stats
+
+                            const messageId = this.stringToHex(peer) + "." + Date.now();
+
+                            const message = {
+                                method: 'getStats',
+                                messageId: messageId
+                            };
+
+                            const respFunc = async (peer: string, messageId: string, data: string) => {
+
+                                try {
+
+                                    const jsonparse = JSON.parse(data);
+                                    const jsondata = jsonparse.data;
+
+console.log("V2 getStats Result");
+console.log(jsondata);
+
+                                    if (!jsondata || parseInt(jsondata.current_block) === 0) throw new Error('Bad Peer');
+
+                                    that.peerVersions[peer] = 2; // assumed since this is ws
+            
+                                    if (that.activePeers.indexOf(peer) === -1)
+                                        that.activePeers.push(peer);
+            
+                                    that.peerHeights[peer] = parseInt(jsondata.current_block);
+            
+                                    const havePeer = await Peer.findOne({url: peer});
+            
+                                    if (!havePeer)
+                                    {
+            
+                                        let stripPeer = peer.replace('http://', '');
+                                        let splitPeer = stripPeer.split(":");
+            
+                                        await Peer.create({
+                                            url: peer,
+                                            ipAddress: splitPeer[0],
+                                            port: splitPeer[1],
+                                            lastSeen: Date.now(),
+                                            isActive: true,
+                                            lastHeight: parseInt(jsondata.current_block),
+                                            createdAt: Date.now(),
+                                            updatedAt: Date.now()
+                                        });
+            
+                                    }
+                                    else
+                                    {
+                                        await Peer.updateOne({url: peer}, {$set: {
+                                            lastSeen: Date.now(),
+                                            isActive: true,
+                                            lastHeight: parseInt(jsondata.current_block),
+                                            updatedAt: Date.now()
+                                        }});
+                                    }
+
+                                    delete that.wsRespFunc[messageId];
+
+                                } catch (e) {
+console.log(e);
+                                    delete that.wsRespFunc[messageId];
+                                }
+
+                            };
+
+                            that.wsRespFunc[messageId] = respFunc;
+
+                            this.send(JSON.stringify(message));
+
                         }
-                    }
-                    else
-                    {
-                        this.peerVersions[peer] = 1;
-                    }
+                        
+                        client.on('message', function message(data) {
 
-                    if (this.activePeers.indexOf(peer) === -1)
-                        this.activePeers.push(peer);
+                            try {
 
-                    this.peerHeights[peer] = parseInt(data.current_block);
+                                const jsondata = JSON.parse(data.toString());
+                                if (that.wsRespFunc[jsondata.messageId])
+                                {
 
-                    let havePeer = await Peer.findOne({url: peer});
+                                    that.wsRespFunc[jsondata.messageId](peer, jsondata.messageId. data.toString());
 
-                    if (!havePeer)
-                    {
+                                }
 
-                        let stripPeer = peer.replace('http://', '');
-                        let splitPeer = stripPeer.split(":");
+                            } catch (e) {
 
-                        await Peer.create({
-                            url: peer,
-                            ipAddress: splitPeer[0],
-                            port: splitPeer[1],
-                            lastSeen: Date.now(),
-                            isActive: true,
-                            lastHeight: parseInt(data.current_block),
-                            createdAt: Date.now(),
-                            updatedAt: Date.now()
+console.log(e);
+
+                            }
                         });
 
-                    }
-                    else
-                    {
-                        await Peer.updateOne({url: peer}, {$set: {
-                            lastSeen: Date.now(),
-                            isActive: true,
-                            lastHeight: parseInt(data.current_block),
-                            updatedAt: Date.now()
-                        }});
-                    }
-                    
+                        client.on('close', function close() {
 
-                } catch (e) {
-                    // peer timeout or some other issue
+                            console.log('ws disconnected from peer: ' + peer);
 
-                    const index = this.activePeers.indexOf(peer);
-                    if (index > -1) {
-                        this.activePeers.splice(index, 1)
+                            // cleanup any open respfunc
+                            const peerHex = that.stringToHex(peer);
+
+                            const functionKeys = Object.keys(that.wsRespFunc);
+
+                            for (let i = 0; i < functionKeys.length; i++)
+                            {
+                                let thisKey = functionKeys[i];
+
+                                if (thisKey.indexOf(peerHex) === 0)
+                                {
+                                    delete that.wsRespFunc[thisKey];
+                                }
+
+                            }
+
+                        });
+
+                    } catch (e) {
+
+console.log(e);
+
                     }
 
-                    await Peer.updateOne({url: peer}, {$set: {isActive: false}});
-                    
+                }
+
+            }
+            else // PEER VERSION 1
+            {
+
+                if (["http://localhost:3000", "http://127.0.0.1:3000"].indexOf(peer) == -1)
+                {
+
+                    try {
+
+                        const response = await axios.get(peer + "/stats");
+                        const data = response.data;
+
+                        if (!data || parseInt(data.current_block) === 0) throw new Error('Bad Peer');
+
+                        if (data && data.node_version)
+                        {
+                            let splitVersion = data.node_version.split(".");
+                            if (parseInt(splitVersion[0]) >= 2)
+                            {
+                                this.peerVersions[peer] = 2;
+                            }
+                        }
+                        else
+                        {
+                            this.peerVersions[peer] = 1;
+                        }
+
+                        if (this.activePeers.indexOf(peer) === -1)
+                            this.activePeers.push(peer);
+
+                        this.peerHeights[peer] = parseInt(data.current_block);
+
+                        const havePeer = await Peer.findOne({url: peer});
+
+                        if (!havePeer)
+                        {
+
+                            let stripPeer = peer.replace('http://', '');
+                            let splitPeer = stripPeer.split(":");
+
+                            await Peer.create({
+                                url: peer,
+                                ipAddress: splitPeer[0],
+                                port: splitPeer[1],
+                                lastSeen: Date.now(),
+                                isActive: true,
+                                lastHeight: parseInt(data.current_block),
+                                createdAt: Date.now(),
+                                updatedAt: Date.now()
+                            });
+
+                        }
+                        else
+                        {
+                            await Peer.updateOne({url: peer}, {$set: {
+                                lastSeen: Date.now(),
+                                isActive: true,
+                                lastHeight: parseInt(data.current_block),
+                                updatedAt: Date.now()
+                            }});
+                        }
+                        
+
+                    } catch (e) {
+                        
+                        // peer timeout or some other issue
+
+                        const index = this.activePeers.indexOf(peer);
+                        if (index > -1) {
+                            this.activePeers.splice(index, 1)
+                        }
+
+                        await Peer.updateOne({url: peer}, {$set: {isActive: false}});
+                        
+                    }
+
                 }
 
             }

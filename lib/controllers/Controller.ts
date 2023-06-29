@@ -3,6 +3,7 @@ import { transactionSchema, addressSchema, balanceSchema, tokenSchema, blockSche
 import { PandaniteCore } from '../core/Core'
 import { Request, Response } from 'express';
 import Big from 'big.js';
+import { find } from 'underscore';
 
 const Transaction = mongoose.model('Transaction', transactionSchema);
 const Address = mongoose.model('Address', addressSchema);
@@ -88,11 +89,14 @@ export class ApiController{
     // General statistics
     public async getStats (req: Request, res: Response) { // Rest API
 
+        const findLastBlock = await Block.find().sort({height: -1}).limit(1);
+        const lastBlock = findLastBlock[0] || {};
+
         try {
 
             let stats = {
-                current_block: 0,
-                last_block_time: 0,
+                current_block: lastBlock.height || 0,
+                last_block_time: lastBlock.timestamp || 0,
                 node_version: globalThis.appVersion,
                 num_coins: 0,
                 num_wallets: 0,
@@ -113,11 +117,14 @@ export class ApiController{
 
     public async getStatsWs (): Promise<any> { // Ws API
 
+        const findLastBlock = await Block.find().sort({height: -1}).limit(1);
+        const lastBlock = findLastBlock[0] || {};
+
         try {
 
             const response = {
-                current_block: 0,
-                last_block_time: 0,
+                current_block: lastBlock.height || 0,
+                last_block_time: lastBlock.timestamp || 0,
                 node_version: globalThis.appVersion,
                 num_coins: 0,
                 num_wallets: 0,

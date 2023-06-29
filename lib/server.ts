@@ -20,6 +20,10 @@ const server = http.createServer(app);
 
 const wss = new WebSocket.WebSocketServer({ noServer: true });
 
+interface ExtWebSocket extends WebSocket {
+    isAlive: boolean;
+}
+
 server.on('upgrade', function upgrade(request, socket, head) {
 
     wss.handleUpgrade(request, socket, head, function done(ws) {
@@ -32,11 +36,30 @@ wss.on('connection', function connection(ws) {
     const processor = new WebSocketProcessor(ws);
     processor.startProcessing();
     ws.send("Connected to " + globalThis.appName + " v" + globalThis.appVersion);
+    const extWs = ws as ExtWebSocket;
+    extWs.isAlive = true;
+    ws.on('error', console.error);
+    ws.on('pong', function() {
+        console.log("heartbeat");
+        const extWs = this as ExtWebSocket;
+        extWs.isAlive = true;
+    });
 });
 
+const wsinterval = setInterval(function ping() {
+    wss.clients.forEach(function each(ws) {
+        const extWs = ws as ExtWebSocket;
+        if (extWs.isAlive === false) return ws.terminate();
+        extWs.isAlive = false;
+        ws.ping();
+    });
+}, 30000);
+  
 process.on('SIGINT', function() {
 
 	globalThis.shuttingDown = true;
+
+    clearInterval(wsinterval);
 	
 	return new Promise((resolve, reject) => {
     
