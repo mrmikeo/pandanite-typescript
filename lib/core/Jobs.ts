@@ -209,21 +209,23 @@ export class PandaniteJobs{
 
         // start jobs for syncing peers list & blocks
 
+        const that = this;
+
         const workerFunction: Worker<number> = async (thisPeer, height) => {
 
             try {
 
-                if (this.peerHeights[thisPeer] >= height)
+                if (that.peerHeights[thisPeer] >= height)
                 {
                     // has blocks we can download
 
                     // what version is this peer? can we do ws?
-                    if (this.websocketPeers[thisPeer])
+                    if (that.websocketPeers[thisPeer])
                     {
 
                         // get block via websocket
 
-                        const messageId = that.stringToHex(thisPeer) + "." + Date.now();
+                        const messageId = that.stringToHex(thisPeer) + "." + Date.now() + Math.random();
 
                         const message = {
                             method: 'getBlock',
@@ -238,14 +240,11 @@ export class PandaniteJobs{
                                 const jsonparse = JSON.parse(data);
                                 const jsondata = jsonparse.data;
 
-console.log("V2 getBlock Result");
-console.log(jsondata);
-
                                 if (jsondata && jsondata.hash)
                                 {
 
-                                    this.downloadedBlocks[height] = jsondata;
-                                    delete this.wsRespFunc[messageId];
+                                    that.downloadedBlocks[height] = jsondata;
+                                    delete that.wsRespFunc[messageId];
 
                                 }
                                 else
@@ -254,10 +253,10 @@ console.log(jsondata);
                                     //if (index > -1) {
                                     //    this.activePeers.splice(index, 1);
                                     //}
-                                    delete this.downloadedBlocks[height];
+                                    delete that.downloadedBlocks[height];
                                     //this.queueProcessor.removeWorker(thisPeer);
-                                    this.queueProcessor.requeue(height);
-                                    delete this.wsRespFunc[messageId];
+                                    that.queueProcessor.requeue(height);
+                                    delete that.wsRespFunc[messageId];
                                 }
 
                             } catch (e) {
@@ -343,8 +342,6 @@ console.log("Last diff height is " + lastDiffHeight);
         await this.updateDifficultyForHeight(lastDiffHeight);
 
         this.checkPeers();
-
-        let that = this;
 
         setInterval(function() {
             if (!that.checkingPeers && globalThis.shuttingDown == false)
@@ -446,7 +443,7 @@ console.log("Last diff height is " + lastDiffHeight);
                             
                             // get stats
 
-                            const messageId = this.stringToHex(peer) + "." + Date.now();
+                            const messageId = this.stringToHex(peer) + "." + Date.now() + Math.random();;
 
                             const message = {
                                 method: 'getStats',
@@ -548,7 +545,7 @@ console.log(e);
 
                                 // get stats
 
-                                const messageId = that.stringToHex(peer) + "." + Date.now();
+                                const messageId = that.stringToHex(peer) + "." + Date.now() + Math.random();
 
                                 const message = {
                                     method: 'getStats',

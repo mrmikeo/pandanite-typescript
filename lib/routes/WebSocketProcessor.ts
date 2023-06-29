@@ -18,8 +18,6 @@ export class WebSocketProcessor {
 
     try {
 
-        console.log(data.toString());
-
         const message = JSON.parse(data.toString());
 
         let response = {};
