@@ -6,4 +6,5 @@ export class Constants {
     static readonly DESIRED_BLOCK_TIME_SEC = 90;
     static readonly MIN_DIFFICULTY = 6;
     static readonly MAX_DIFFICULTY = 255;
+    static readonly TRANSACTIONINFO_BUFFER_SIZE = 149;
 }

@@ -15,7 +15,7 @@ https://www.digitalocean.com/community/tutorials/how-to-install-node-js-on-ubunt
 ## Clone this repository
 
 ```
-git clone git@github.com/mrmikeo/pandanite-typescript.git
+git clone https://github.com/mrmikeo/pandanite-typescript
 ```
 
 Then install the dependencies

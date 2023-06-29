@@ -92,14 +92,34 @@ export class ApiController{
         const findLastBlock = await Block.find().sort({height: -1}).limit(1);
         const lastBlock = findLastBlock[0] || {};
 
+        const qtotalcoins = await Balance.aggregate([
+            {
+              $match: {token: null},
+            },{
+              $group: {
+                _id: null,
+                total: {
+                  $sum:  "$balance"
+                }
+              }
+            }]
+        );
+
+        let totalcoins = Big(0).toFixed();
+
+        if (qtotalcoins[0] && qtotalcoins[0].total)
+            totalcoins = Big(qtotalcoins[0].total).div(10**4).toFixed(4);
+    
+        const numWallets = await Address.countDocuments();
+
         try {
 
             let stats = {
                 current_block: lastBlock.height || 0,
                 last_block_time: lastBlock.timestamp || 0,
                 node_version: globalThis.appVersion,
-                num_coins: 0,
-                num_wallets: 0,
+                num_coins: totalcoins,
+                num_wallets: numWallets,
                 pending_transactions: 0,
                 transactions_per_second: 0,
                 mempool: []
@@ -120,14 +140,34 @@ export class ApiController{
         const findLastBlock = await Block.find().sort({height: -1}).limit(1);
         const lastBlock = findLastBlock[0] || {};
 
+        const qtotalcoins = await Balance.aggregate([
+            {
+              $match: {token: null},
+            },{
+              $group: {
+                _id: null,
+                total: {
+                  $sum:  "$balance"
+                }
+              }
+            }]
+        );
+
+        let totalcoins = Big(0).toFixed();
+
+        if (qtotalcoins[0] && qtotalcoins[0].total)
+            totalcoins = Big(qtotalcoins[0].total).div(10**4).toFixed(4);
+    
+        const numWallets = await Address.countDocuments();
+
         try {
 
             const response = {
                 current_block: lastBlock.height || 0,
                 last_block_time: lastBlock.timestamp || 0,
                 node_version: globalThis.appVersion,
-                num_coins: 0,
-                num_wallets: 0,
+                num_coins: totalcoins,
+                num_wallets: numWallets,
                 pending_transactions: 0,
                 transactions_per_second: 0,
                 mempool: []
@@ -339,10 +379,15 @@ export class ApiController{
 
     public addTransaction (req: Request, res: Response) { 
 
+        console.log("addTransaction REST endpoint called")
+        console.log(req.body);
+
     }
 
     public addTransactionJson (req: Request, res: Response) { 
 
+        console.log("addTransactionJson REST endpoint called")
+        console.log(req.body);
     }
 
     public verifyTransaction (req: Request, res: Response) { 

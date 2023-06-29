@@ -73,9 +73,11 @@ export class Routes {
         app.route('/create_transaction')
         .post(this.apiController.createTransaction) 
 
+        // Adds transaction to mempool from another peer
         app.route('/add_transaction')
         .post(this.apiController.addTransaction)
 
+        // Adds transaction to mempool from json
         app.route('/add_transaction_json')
         .post(this.apiController.addTransactionJson)
 
