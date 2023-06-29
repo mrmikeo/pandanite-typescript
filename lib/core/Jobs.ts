@@ -442,7 +442,6 @@ console.log("Last diff height is " + lastDiffHeight);
                         {
                             
                             // get stats
-
                             const messageId = this.stringToHex(peer) + "." + Date.now() + Math.random();;
 
                             const message = {
@@ -456,9 +455,6 @@ console.log("Last diff height is " + lastDiffHeight);
 
                                     const jsonparse = JSON.parse(data);
                                     const jsondata = jsonparse.data;
-
-console.log("V2 getStats Result");
-console.log(jsondata);
 
                                     if (!jsondata || parseInt(jsondata.current_block) === 0) throw new Error('Bad Peer');
 
@@ -558,9 +554,6 @@ console.log(e);
 
                                         const jsonparse = JSON.parse(data);
                                         const jsondata = jsonparse.data;
-
-console.log("V2 getStats Result");
-console.log(jsondata);
 
                                         if (!jsondata || parseInt(jsondata.current_block) === 0) throw new Error('Bad Peer');
 
