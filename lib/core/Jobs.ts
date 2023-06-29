@@ -180,7 +180,7 @@ export class PandaniteJobs{
 
     public async syncPeers()  {
 
-        if (argv.r == true) // reset chain
+        if (argv.reset === true) // reset chain
         {
             await Block.deleteMany();
             await Transaction.deleteMany();

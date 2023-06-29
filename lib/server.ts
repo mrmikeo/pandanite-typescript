@@ -4,6 +4,8 @@ import * as minimist from 'minimist';
 
 const argv = minimist(process.argv.slice(1));
 
+console.log(argv);
+
 const PORT = argv.port || 3000;
 
 globalThis.appVersion = '2.0.0';
