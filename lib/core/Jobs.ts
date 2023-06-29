@@ -6,8 +6,6 @@ import Big from 'big.js';
 import { Constants } from "./Constants"
 import * as minimist from 'minimist';
 
-const argv = minimist(process.argv.slice(1));
-
 const Transaction = mongoose.model('Transaction', transactionSchema);
 const Address = mongoose.model('Address', addressSchema);
 const Balance = mongoose.model('Balance', balanceSchema);
@@ -179,6 +177,8 @@ export class PandaniteJobs{
     }
 
     public async syncPeers()  {
+
+        const argv = minimist(process.argv.slice(1));
 
         if (argv.reset === true) // reset chain
         {
