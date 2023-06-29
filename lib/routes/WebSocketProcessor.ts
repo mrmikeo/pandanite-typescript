@@ -22,8 +22,6 @@ export class WebSocketProcessor {
 
         const message = JSON.parse(data.toString());
 
-        console.log('Received message:', message);
-
         let response = {};
 
         switch (message.method) {

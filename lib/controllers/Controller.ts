@@ -166,7 +166,7 @@ export class ApiController{
 
                 let blockinfo = {
                     difficulty: block.difficulty,
-                    hash: block.hash,
+                    hash: block.blockHash,
                     id: block.height,
                     lastBlockHash: block.lastBlockHash,
                     merkleRoot: block.merkleRoot,
@@ -226,7 +226,7 @@ export class ApiController{
 
                 let blockinfo = {
                     difficulty: block.difficulty,
-                    hash: block.hash,
+                    hash: block.blockHash,
                     id: block.height,
                     lastBlockHash: block.lastBlockHash,
                     merkleRoot: block.merkleRoot,
