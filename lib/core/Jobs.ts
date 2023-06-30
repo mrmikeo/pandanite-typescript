@@ -1079,7 +1079,7 @@ logger.warn(e);
             for (let i = 0; i < block.transactions.length; i++)
             {
                 const thisTrx = block.transactions[i];
-                if (!excludedTransactions.includes(thisTrx.hash) && thisTrx.from && thisTrx.from != "00000000000000000000000000000000000000000000000000")
+                if (!excludedTransactions.includes(thisTrx.txid) && thisTrx.from && thisTrx.from != "00000000000000000000000000000000000000000000000000")
                 {
                     if (!thisTrx.type || thisTrx.type === 0)
                     {
