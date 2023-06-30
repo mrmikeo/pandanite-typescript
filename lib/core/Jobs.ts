@@ -1072,11 +1072,14 @@ logger.warn(e);
                 throw new Error(e);
             }
 
+            // Poor previous design requires this :(
+            const excludedTransactions = ["9B756E997F65772E54804D1373B5C6AEBB35555C61FDB0AA1AA54E47DDF1D2BE"];
+
             // Check Balances
             for (let i = 0; i < block.transactions.length; i++)
             {
                 const thisTrx = block.transactions[i];
-                if (thisTrx.from && thisTrx.from != "00000000000000000000000000000000000000000000000000")
+                if (excludedTransactions.indexOf(thisTrx.hash) === -1 && thisTrx.from && thisTrx.from != "00000000000000000000000000000000000000000000000000")
                 {
                     if (!thisTrx.type || thisTrx.type === 0)
                     {
@@ -1093,11 +1096,34 @@ logger.warn(e);
                             isValid = false;
                         }
                     }
+                    else if (thisTrx.type === 1)
+                    {
+                        // token transfer
 
+                        if (!thisTrx.token) isValid = false;
 
+                        const tokenInfo = await Token.findOne({tokenId: thisTrx.token});
 
+                        if (!tokenInfo) isValid = false;
 
+                        // get address balance
+                        const balanceInfo = await Balance.findOne({addressString: thisTrx.from, token: tokenInfo._id});
 
+                        if (!balanceInfo) 
+                        {
+                            isValid = false;
+                        }
+                        else
+                        {
+                            const totalTxAmount = Big(thisTrx.amount).plus(thisTrx.fee).toFixed();
+
+                            if (Big(totalTxAmount).gt(balanceInfo.balance))
+                            {
+                                logger.warn("Transaction Amount Exceeds Account Balance " + thisTrx.txid + " Value: " + totalTxAmount + " >  Balance: " + balanceInfo.balance);
+                                isValid = false;
+                            }
+                        }
+                    }
                 }
             }
 

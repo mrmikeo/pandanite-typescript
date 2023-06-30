@@ -129,6 +129,9 @@ export const tokenSchema = new Schema({
         type: Schema.Types.ObjectId,
         ref: 'Transaction'
     },
+    tokenId: {
+        type: String
+    },
     name: {
         type: String
     },
@@ -150,6 +153,7 @@ export const tokenSchema = new Schema({
 
 tokenSchema.index({ ownerAddress: 1 });
 tokenSchema.index({ transaction: 1 });
+tokenSchema.index({ tokenId: 1 });
 
 
 export const blockSchema = new Schema({
