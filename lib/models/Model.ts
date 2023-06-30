@@ -96,6 +96,12 @@ export const balanceSchema = new Schema({
         type: Schema.Types.ObjectId,
         ref: 'Token'
     },
+    addressString: {
+        type: String
+    },
+    tokenString: {
+        type: String
+    },
     balance: {
         type: Number
     },
@@ -109,7 +115,10 @@ export const balanceSchema = new Schema({
     }
 });
 
+balanceSchema.index({ token: 1 });
 balanceSchema.index({ address: 1, token: 1 });
+balanceSchema.index({ addressString: 1, token: 1 });
+balanceSchema.index({ addressString: 1, tokenString: 1 });
 
 export const tokenSchema = new Schema({
     ownerAddress: {

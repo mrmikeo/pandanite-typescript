@@ -258,7 +258,7 @@ export class ApiController{
                     transactions: []
                 };
 
-                let transactions = await Transaction.find({block: block._id}).populate("fromAddress").populate("toAddress").populate("token"); 
+                let transactions = await Transaction.find({block: block._id}).populate("fromAddress").populate("toAddress").populate("token").sort({blockIndex: 1}); 
 
                 for (let i = 0; i < transactions.length; i++)
                 {
@@ -321,7 +321,7 @@ export class ApiController{
                     transactions: []
                 };
 
-                let transactions = await Transaction.find({block: block._id}).populate("fromAddress").populate("toAddress").populate("token"); 
+                let transactions = await Transaction.find({block: block._id}).populate("fromAddress").populate("toAddress").populate("token").sort({blockIndex: 1}); 
 
                 for (let i = 0; i < transactions.length; i++)
                 {
@@ -540,25 +540,26 @@ export class ApiController{
         const lastBlock = await Block.find().sort({height: -1}).limit(1);
         const lastBlockHeight = lastBlock[0]?.height || 0;
 
-        const txInfo = await Transaction.findOne({txid: req.query.txid}).populate('block');
+        const txInfo = await Transaction.findOne({txid: req.query.txid}).populate('block').populate("fromAddress").populate("toAddress").populate("token");
 
         if (txInfo)
         {
 
             const response = {
                 type: txInfo.type,
-                token: txInfo.token,
+                token: txInfo.token?.transaction,
                 tokenAmount: txInfo.token?txInfo.amount:null,
                 amount: txInfo.token?0:txInfo.amount,
                 fee: txInfo.fee,
-                from: txInfo.from,
-                to: txInfo.to,
+                from: txInfo.fromAddress.address,
+                to: txInfo.toAddress.address,
                 signature: txInfo.signature,
                 signingKey: txInfo.signingKey,
                 timestamp: txInfo.nonce,
                 nonce: txInfo.nonce,
                 txid:  txInfo.hash,
                 blockHeight: txInfo.block.height,
+                blockIndex: txInfo.blockIndex,
                 confirmations: lastBlockHeight - txInfo.block.height,
                 isGenerate: txInfo.isGenerate
             };

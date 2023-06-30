@@ -343,6 +343,7 @@ console.log("Last diff height is " + lastDiffHeight);
 
         this.checkPeers();
 
+        // Interval jobs
         setInterval(function() {
             if (!that.checkingPeers && globalThis.shuttingDown == false)
             {
@@ -522,7 +523,11 @@ console.log(e);
 
                             };
 
-                            this.websocketPeers[peer].send(JSON.stringify(message));
+                            try {
+                                this.websocketPeers[peer].send(JSON.stringify(message));
+                            } catch (e) {
+                                delete that.wsRespFunc[messageId];
+                            }
                             
                         }
 
@@ -619,7 +624,11 @@ console.log(e);
 
                                 };
 
-                                this.send(JSON.stringify(message));
+                                try {
+                                    this.send(JSON.stringify(message));
+                                } catch (e) {
+                                    delete that.wsRespFunc[messageId];
+                                }
 
                             }
                             
@@ -1050,6 +1059,34 @@ console.log(e);
                 throw new Error(e);
             }
 
+            // Check Balances
+
+            for (let i = 0; i < block.transactions.length; i++)
+            {
+                const thisTrx = block.transactions[i];
+                if (thisTrx.from && thisTrx.from != "00000000000000000000000000000000000000000000000000")
+                {
+                    if (!thisTrx.type || thisTrx.type === 0)
+                    {
+                        // standard transfer
+
+                        // get address balance
+                        const balanceInfo = await Balance.findOne({addressString: thisTrx.from, token: null});
+
+                        if (Big(thisTrx.amount).gt(balanceInfo.balance))
+                        {
+                            console.log("Transaction Amount Exceeds Account Balance " + thisTrx.txid);
+                            isValid = false;
+                        }
+                    }
+
+
+
+
+
+                }
+            }
+
         }
         else if (block.id === 1)
         {
@@ -1103,6 +1140,13 @@ console.log(e);
 
                 const thisTx = block.transactions[i];
 
+                const tokenInfo = await Token.findOne({transaction: thisTx.token});
+                let tokenId = null;
+                if (tokenInfo)
+                {
+                    tokenId = tokenInfo._id;
+                }
+
                 let toAddress = await Address.findOne({address: thisTx.to});
                 let fromAddress = await Address.findOne({address: thisTx.from});
 
@@ -1135,7 +1179,7 @@ console.log(e);
                     signature: thisTx.signature,
                     hash: thisTx.txid,
                     amount: transactionAmount,
-                    token: thisTx.token,
+                    token: tokenId,
                     fee: thisTx.fee,
                     isGenerate: thisTx.from===""?true:false,
                     nonce: thisTx.timestamp,
@@ -1155,16 +1199,18 @@ console.log(e);
                 if (thisTx.from !== "00000000000000000000000000000000000000000000000000" && thisTx.from !== "")
                 {
                     const numbernegative = transactionAmount * -1;
-                    await Balance.updateOne({address: fromAddress._id, token: thisTx.token}, {$inc: {balance: numbernegative}});
+                    await Balance.updateOne({address: fromAddress._id, token: tokenId}, {$inc: {balance: numbernegative}});
                 }
 
-                const haveToBalance = await Balance.findOne({address: toAddress._id, token: thisTx.token});
+                const haveToBalance = await Balance.findOne({address: toAddress._id, token: tokenId});
 
                 if (!haveToBalance)
                 {
                     await Balance.create({
                         address: toAddress._id,
-                        token: thisTx.token,
+                        token: tokenId,
+                        addressString: thisTx.to,
+                        tokenString: thisTx.token,
                         balance: thisTx.amount,
                         createdAt: Date.now(),
                         updatedAt: Date.now()
@@ -1173,7 +1219,7 @@ console.log(e);
                 }
                 else
                 {
-                    await Balance.updateOne({address: toAddress._id, token: thisTx.token}, {$inc: {balance: transactionAmount}});
+                    await Balance.updateOne({address: toAddress._id, token: tokenId}, {$inc: {balance: transactionAmount}});
                 }
 
             }
