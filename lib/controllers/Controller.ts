@@ -1,5 +1,5 @@
 import * as mongoose from 'mongoose';
-import { transactionSchema, addressSchema, balanceSchema, tokenSchema, blockSchema, peerSchema } from '../models/Model';
+import { transactionSchema, addressSchema, balanceSchema, tokenSchema, blockSchema, peerSchema, mempoolSchema } from '../models/Model';
 import { PandaniteCore } from '../core/Core'
 import { Request, Response } from 'express';
 import Big from 'big.js';
@@ -11,6 +11,7 @@ const Balance = mongoose.model('Balance', balanceSchema);
 const Token = mongoose.model('Token', tokenSchema);
 const Block = mongoose.model('Block', blockSchema);
 const Peer = mongoose.model('Peer', peerSchema);
+const Mempool = mongoose.model('Mempool', mempoolSchema);
 
 export class ApiController{
 
@@ -114,7 +115,7 @@ export class ApiController{
 
         try {
 
-            let stats = {
+            const stats = {
                 current_block: lastBlock.height || 0,
                 last_block_time: lastBlock.timestamp || 0,
                 node_version: globalThis.appVersion,
@@ -124,6 +125,27 @@ export class ApiController{
                 transactions_per_second: 0,
                 mempool: []
             };
+
+            const memPool = await Mempool.find();
+
+            for (let i = 0; i < memPool.length; i++)
+            {
+                const thistx = memPool[i];
+                stats.mempool.push({
+                    type: thistx.type,
+                    token: thistx.token,
+                    tokenAmount: thistx.token?thistx.amount:null,
+                    amount: thistx.token?0:thistx.amount,
+                    fee: thistx.fee,
+                    from: thistx.from,
+                    to: thistx.to,
+                    signature: thistx.signature,
+                    signingKey: thistx.signingKey,
+                    timestamp: thistx.nonce,
+                    nonce: thistx.nonce,
+                    txid:  thistx.hash
+                });
+            }
 
             res.json(stats);
 
@@ -172,6 +194,27 @@ export class ApiController{
                 transactions_per_second: 0,
                 mempool: []
             };
+
+            const memPool = await Mempool.find();
+
+            for (let i = 0; i < memPool.length; i++)
+            {
+                const thistx = memPool[i];
+                response.mempool.push({
+                    type: thistx.type,
+                    token: thistx.token,
+                    tokenAmount: thistx.token?thistx.amount:null,
+                    amount: thistx.token?0:thistx.amount,
+                    fee: thistx.fee,
+                    from: thistx.from,
+                    to: thistx.to,
+                    signature: thistx.signature,
+                    signingKey: thistx.signingKey,
+                    timestamp: thistx.nonce,
+                    nonce: thistx.nonce,
+                    txid:  thistx.hash
+                });
+            }
 
             return response;
 
@@ -222,8 +265,10 @@ export class ApiController{
                     let thistx = transactions[i];
 
                     blockinfo.transactions.push({
+                        type: thistx.type,
                         token: thistx.token?.transaction,
-                        amount: thistx.amount,
+                        tokenAmount: thistx.token?thistx.amount:null,
+                        amount: thistx.token?0:thistx.amount,
                         fee: thistx.fee,
                         from: thistx.fromAddress.address,
                         to: thistx.toAddress.address,
@@ -283,8 +328,10 @@ export class ApiController{
                     let thistx = transactions[i];
 
                     blockinfo.transactions.push({
+                        type: thistx.type,
                         token: thistx.token?.transaction,
-                        amount: thistx.amount,
+                        tokenAmount: thistx.token?thistx.amount:null,
+                        amount: thistx.token?0:thistx.amount,
                         fee: thistx.fee,
                         from: thistx.fromAddress.address,
                         to: thistx.toAddress.address,
@@ -318,7 +365,33 @@ export class ApiController{
     }
 
     // Transaction Queue - Mempool
-    public getTxJson (req: Request, res: Response) { 
+    public async getTxJson (req: Request, res: Response) { 
+
+        const memPool = await Mempool.find();
+
+        const response = [];
+
+        for (let i = 0; i < memPool.length; i++)
+        {
+            const thistx = memPool[i];
+
+            response.push({
+                type: thistx.type,
+                token: thistx.token,
+                tokenAmount: thistx.token?thistx.amount:null,
+                amount: thistx.token?0:thistx.amount,
+                fee: thistx.fee,
+                from: thistx.from,
+                to: thistx.to,
+                signature: thistx.signature,
+                signingKey: thistx.signingKey,
+                timestamp: thistx.nonce,
+                nonce: thistx.nonce,
+                txid:  thistx.hash
+            });
+        }
+
+        return response;
 
     }
 
@@ -355,6 +428,7 @@ export class ApiController{
 
     }
 
+    // returns octet stream
     public getTx (req: Request, res: Response) { 
 
     }
@@ -392,7 +466,112 @@ export class ApiController{
         console.log(req.body);
     }
 
-    public verifyTransaction (req: Request, res: Response) { 
+    // get tx list status and blockid - this should be depricated
+    public async verifyTransaction (req: Request, res: Response) { 
+
+        try {
+
+            const inputList = req.body;
+
+            const inputArray = JSON.parse(inputList);
+
+            const txDbList = [];
+            
+            for (let i = 0; i < inputArray.length; i++)
+            {
+                const thisItem = inputArray[i];
+                if (thisItem.txid) txDbList.push(thisItem.txid)
+            }
+
+            const txList = await Transaction.find({txid: txDbList}).populate('block');
+
+            const foundTx = {};
+
+            for (let i = 0; i < txList.length; i++)
+            {
+                const thistx = txList[i];
+
+                foundTx[thistx.txid] = {
+                    txid: thistx.txid,
+                    status: "IN_CHAIN",
+                    blockId: thistx.block.height
+                };
+            }
+
+            const response = [];
+
+            for (let i = 0; i < inputArray.length; i++)
+            {
+                const thisItem = inputArray[i];
+                if (thisItem.txid) 
+                {
+                    if (foundTx[thisItem.txid])
+                    {
+                        response.push(foundTx[thisItem.txid]);
+                    }
+                    else
+                    {
+                        response.push({txid: thisItem.txid, status: "NOT_IN_CHAIN"});
+                    }
+                }
+            }
+
+            return response;
+
+        } catch (e) {
+            return {
+                error: "An Error Occurred"
+            };
+        }
+
+    }
+
+    // NEW Rest API Endpoints
+
+    // Get single onchain tx
+    public async getTransaction (req: Request, res: Response) { 
+
+        if (!req.query || !req.query.txid) {
+            return {
+                error: "Transaction Not Found"
+            };
+        }
+
+        const lastBlock = await Block.find().sort({height: -1}).limit(1);
+        const lastBlockHeight = lastBlock[0]?.height || 0;
+
+        const txInfo = await Transaction.findOne({txid: req.query.txid}).populate('block');
+
+        if (txInfo)
+        {
+
+            const response = {
+                type: txInfo.type,
+                token: txInfo.token,
+                tokenAmount: txInfo.token?txInfo.amount:null,
+                amount: txInfo.token?0:txInfo.amount,
+                fee: txInfo.fee,
+                from: txInfo.from,
+                to: txInfo.to,
+                signature: txInfo.signature,
+                signingKey: txInfo.signingKey,
+                timestamp: txInfo.nonce,
+                nonce: txInfo.nonce,
+                txid:  txInfo.hash,
+                blockHeight: txInfo.block.height,
+                confirmations: lastBlockHeight - txInfo.block.height,
+                isGenerate: txInfo.isGenerate
+            };
+
+            return response;
+
+        }
+        else
+        {
+            return {
+                error: "Transaction Not Found"
+            };
+        }
 
     }
 

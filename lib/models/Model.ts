@@ -2,7 +2,14 @@ import * as mongoose from 'mongoose';
 
 const Schema = mongoose.Schema;
 
+/*
+* txtypes proposed: 0 = transfer, 1 = transfertoken, 2 = createtoken, 3 = minttoken, 4 = transfertokenowner
+*/
 export const transactionSchema = new Schema({
+    type: {
+        type: Number,
+        defaultsTo: 0
+    },
     toAddress: {
         type: Schema.Types.ObjectId,
         ref: 'Address'
@@ -212,3 +219,52 @@ export const peerSchema = new Schema({
 peerSchema.index({ ipAddress: 1, port: 1 });
 peerSchema.index({ url: 1 });
 peerSchema.index({ isActive: 1 });
+
+/*
+* txtypes proposed: 0 = transfer, 1 = transfertoken, 2 = createtoken, 3 = minttoken, 4 = transfertokenowner
+*/
+export const mempoolSchema = new Schema({
+    type: {
+        type: Number,
+        defaultsTo: 0
+    },
+    to: {
+        type: String 
+    },
+    from: {
+        type: String 
+    },
+    signature: {
+        type: String            
+    },
+    hash: {
+        type: String
+    },
+    amount: {
+        type: Number,
+        defaultsTo: 0        
+    },
+    token: {
+        type: String
+    },
+    fee: {
+        type: Number,
+        defaultsTo: 0
+    },
+    nonce: {
+        type: String
+    },
+    signingKey: {
+        type: String
+    },
+    createdAt: {
+        type: Number,
+        default: Date.now
+    },
+    updatedAt: {
+        type: Number,
+        default: Date.now
+    }
+});
+
+mempoolSchema.index({ hash: 1 });

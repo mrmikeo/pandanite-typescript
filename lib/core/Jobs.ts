@@ -1,7 +1,7 @@
 import { PandaniteCore } from './Core'
 import axios from 'axios';
 import * as mongoose from 'mongoose';
-import { transactionSchema, addressSchema, balanceSchema, tokenSchema, blockSchema, peerSchema } from '../models/Model';
+import { transactionSchema, addressSchema, balanceSchema, tokenSchema, blockSchema, peerSchema, mempoolSchema } from '../models/Model';
 import Big from 'big.js';
 import { Constants } from "./Constants"
 import * as minimist from 'minimist';
@@ -14,6 +14,7 @@ const Balance = mongoose.model('Balance', balanceSchema);
 const Token = mongoose.model('Token', tokenSchema);
 const Block = mongoose.model('Block', blockSchema);
 const Peer = mongoose.model('Peer', peerSchema);
+const Mempool = mongoose.model('Mempool', mempoolSchema);
 
 axios.defaults.timeout === 3000;
 
@@ -915,12 +916,10 @@ console.log(e);
                 const data = this.downloadedBlocks[nextHeight];
 
                 try {
-                    console.log("Try import block: " + nextHeight)
                     await this.importBlock(data);
                     delete this.downloadedBlocks[nextHeight];
                     nextHeight++;
                 } catch (e) {
-                    console.log(data);
                     console.log(e);
                     delete this.downloadedBlocks[nextHeight];
                     const previousHeight = nextHeight - 1;
@@ -930,6 +929,8 @@ console.log(e);
                 }
                 
             }
+
+            this.queueProcessor.requeue(nextHeight);
 
         }
 
@@ -1124,13 +1125,17 @@ console.log(e);
                         updatedAt: Date.now()
                     });
                 }
+
+                const transactionAmount = thisTx.token?thisTx.tokenAmount:thisTx.amount;
+
                 const newTransaction = {
+                    type: thisTx.type || 0,
                     toAddress: toAddress._id,
                     fromAddress: fromAddress._id,
                     signature: thisTx.signature,
                     hash: thisTx.txid,
-                    amount: thisTx.amount,
-                    token: null,
+                    amount: transactionAmount,
+                    token: thisTx.token,
                     fee: thisTx.fee,
                     isGenerate: thisTx.from===""?true:false,
                     nonce: thisTx.timestamp,
@@ -1143,21 +1148,23 @@ console.log(e);
 
                 const newTx = await Transaction.create(newTransaction);
 
+                await Mempool.deleteMany({hash: thisTx.txid});
+
                 blockTx.push(newTx._id);
 
                 if (thisTx.from !== "00000000000000000000000000000000000000000000000000" && thisTx.from !== "")
                 {
-                    const numbernegative = thisTx.amount * -1;
-                    await Balance.updateOne({address: fromAddress._id, token: null}, {$inc: {balance: numbernegative}});
+                    const numbernegative = transactionAmount * -1;
+                    await Balance.updateOne({address: fromAddress._id, token: thisTx.token}, {$inc: {balance: numbernegative}});
                 }
 
-                const haveToBalance = await Balance.findOne({address: toAddress._id, token: null});
+                const haveToBalance = await Balance.findOne({address: toAddress._id, token: thisTx.token});
 
                 if (!haveToBalance)
                 {
                     await Balance.create({
                         address: toAddress._id,
-                        token: null,
+                        token: thisTx.token,
                         balance: thisTx.amount,
                         createdAt: Date.now(),
                         updatedAt: Date.now()
@@ -1166,7 +1173,7 @@ console.log(e);
                 }
                 else
                 {
-                    await Balance.updateOne({address: toAddress._id, token: null}, {$inc: {balance: thisTx.amount}});
+                    await Balance.updateOne({address: toAddress._id, token: thisTx.token}, {$inc: {balance: transactionAmount}});
                 }
 
             }
