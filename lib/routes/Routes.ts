@@ -7,6 +7,8 @@ export class Routes {
     
     public routes(app): void {   
 
+        // REST Get Routes
+
         // Name 
         app.route('/name')
         .get(this.apiController.getName) 
@@ -62,7 +64,7 @@ export class Routes {
         app.route('/create_wallet')
         .get(this.apiController.createWallet) 
 
-
+        // REST Post Routes
 
         app.route('/add_peer')
         .post(this.apiController.addPeer) 
@@ -85,7 +87,14 @@ export class Routes {
         .post(this.apiController.verifyTransaction)
 
 
-        /*
+        // NEW REST Routes (V2)
+
+        // query input txid=XX
+        app.route('/get_transaction')
+        .get(this.apiController.getTransaction) 
+
+
+        /* examples
         app.route('/')
         .get((req: Request, res: Response) => {            
             res.status(200).send({

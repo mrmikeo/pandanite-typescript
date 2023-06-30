@@ -3,6 +3,7 @@ import * as _ from 'underscore';
 import * as crypto from 'crypto'
 import { pufferFish } from './Pufferfish'
 import { Constants} from "./Constants"
+import * as bip39 from 'bip39';
 
 const unhexlify = function(str: string) { 
     var result = [];
@@ -30,6 +31,12 @@ const dec2hex = function(str: string) {
         hex.push(sum.pop().toString(16))
     }
     return hex.join('')
+}
+
+const pad = function(n: string, width: number, z: string) {
+    z = z || '0';
+    n = n + '';
+    return n.length >= width ? n : new Array(width - n.length + 1).join(z) + n;
 }
 
 class HashTree {
@@ -261,20 +268,16 @@ export class PandaniteCore{
     }
 
     static getTransactionId(transaction: any): string {
-        const pad = function(n: string, width: number, z: string) {
-            z = z || '0';
-            n = n + '';
-            return n.length >= width ? n : new Array(width - n.length + 1).join(z) + n;
-          }
 
         const tx = {
             "from": transaction.from, 
             "to": transaction.to, 
             "fee": transaction.fee,
-            "amount": transaction.amount, 
+            "amount": transaction.token?transaction.tokenAmount:transaction.amount, 
             "timestamp": transaction.timestamp,
             "token": transaction.token,
-            "signature": transaction.signature
+            "signature": transaction.signature,
+            "type": transaction.type || 0
         };
 
         let ctx = crypto.createHash('sha256');
@@ -302,6 +305,17 @@ export class PandaniteCore{
         let swaptimestamp = Buffer.from(hextimestampa).toString('hex');
         ctx.update(unhexlify(swaptimestamp));
 
+        if (tx.type && tx.type !== 0)
+        {
+
+            let hextype = Buffer.from(pad(dec2hex(tx.type), 16, '0'), 'hex');
+            let hextypea = Buffer.from(hextype).toJSON().data;
+            hextypea.reverse();
+            let swaptype = Buffer.from(hextypea).toString('hex');
+            ctx.update(unhexlify(swaptype));
+
+        }
+
         if (tx.token)
         {
 
@@ -328,11 +342,6 @@ export class PandaniteCore{
     }
 
     static getBlockHash(block: any): string {
-        const pad = function(n: string, width: number, z: string) {
-            z = z || '0';
-            n = n + '';
-            return n.length >= width ? n : new Array(width - n.length + 1).join(z) + n;
-          }
 
         let ctx = crypto.createHash('sha256');
 
@@ -433,6 +442,170 @@ export class PandaniteCore{
       
           return newDifficulty;
         }
+    }
+
+    static createWallet() {
+
+
+    }
+
+    static walletAddressFromPublicKey(publicKey: string) {
+    
+        try {
+
+            let bpublicKey = Buffer.from(publicKey, "hex");
+    
+            let hash = crypto.createHash('sha256').update(bpublicKey).digest();
+
+            let hash2 = crypto.createHash('ripemd160').update(hash).digest();
+
+            let hash3 = crypto.createHash('sha256').update(hash2).digest();
+
+            let hash4 = crypto.createHash('sha256').update(hash3).digest();
+    
+            let checksum = hash4[0];
+    
+            let address = [];
+    
+            address[0] = '00';
+            for(let i = 1; i <= 20; i++) 
+            {
+                address[i] = pad(hash2[i-1].toString(16), 2, "0");
+            }
+            address[21] = pad(hash4[0].toString(16), 2, "0");
+            address[22] = pad(hash4[1].toString(16), 2, "0");
+            address[23] = pad(hash4[2].toString(16), 2, "0");
+            address[24] = pad(hash4[3].toString(16), 2, "0");
+    
+            return address.join('').toUpperCase();
+    
+        } catch (e) {
+            return false;
+        }
+    
+    }
+
+    static generateNewAddress(password = "") {
+
+        try {
+
+            const entropy = crypto.randomBytes(16);
+            
+            let mnemonic = bip39.entropyToMnemonic(entropy);
+            
+            let seed = bip39.mnemonicToSeedSync(mnemonic, password);
+            
+            let seedhash = crypto.createHash('sha256').update(seed).digest(); //returns a buffer
+
+            let keyPair = ed25519.MakeKeypair(seedhash);
+
+            let bpublicKey = Buffer.from(keyPair.publicKey.toString("hex").toUpperCase(), "hex");
+
+            let hash = crypto.createHash('sha256').update(bpublicKey).digest();
+
+            let hash2 = crypto.createHash('ripemd160').update(hash).digest();
+
+            let hash3 = crypto.createHash('sha256').update(hash2).digest();
+
+            let hash4 = crypto.createHash('sha256').update(hash3).digest();
+
+            let checksum = hash4[0];
+
+            let addressArray = [];
+
+            addressArray[0] = '00';
+            for(let i = 1; i <= 20; i++) 
+            {
+                addressArray[i] = pad(hash2[i-1].toString(16), 2, "0");
+            }
+            addressArray[21] = pad(hash4[0].toString(16), 2, "0");
+            addressArray[22] = pad(hash4[1].toString(16), 2, "0");
+            addressArray[23] = pad(hash4[2].toString(16), 2, "0");
+            addressArray[24] = pad(hash4[3].toString(16), 2, "0");
+
+            let address = addressArray.join('').toUpperCase();
+
+            let newAccount = {
+                wallet: address,
+                seed: seed.toString("hex").toUpperCase(),
+                mnemonic: mnemonic,
+                seedPassword: password,
+                publicKey: keyPair.publicKey.toString("hex").toUpperCase(),
+                privateKey: keyPair.privateKey.toString("hex").toUpperCase()
+            };
+            
+            return newAccount;
+
+        } catch (e) {
+            return false;
+        }
+
+    }
+    
+    static generateAddressFromMnemonic(mnemonic: string, password = "") {
+
+        let isValid = bip39.validateMnemonic(mnemonic);
+
+        if (isValid == false)
+        {
+        
+            return false;
+        
+        }
+        else
+        {
+
+            try {
+
+                let seed = bip39.mnemonicToSeedSync(mnemonic, password);
+
+                let seedhash = crypto.createHash('sha256').update(seed).digest(); //returns a buffer
+
+                let keyPair = ed25519.MakeKeypair(seedhash);
+
+                let bpublicKey = Buffer.from(keyPair.publicKey.toString("hex").toUpperCase(), "hex");
+
+                let hash = crypto.createHash('sha256').update(bpublicKey).digest();
+
+                let hash2 = crypto.createHash('ripemd160').update(hash).digest();
+
+                let hash3 = crypto.createHash('sha256').update(hash2).digest();
+
+                let hash4 = crypto.createHash('sha256').update(hash3).digest();
+
+                let checksum = hash4[0];
+
+                let addressArray = [];
+
+                addressArray[0] = '00';
+                for(let i = 1; i <= 20; i++) 
+                {
+                    addressArray[i] = pad(hash2[i-1].toString(16), 2, "0");
+                }
+                addressArray[21] = pad(hash4[0].toString(16), 2, "0");
+                addressArray[22] = pad(hash4[1].toString(16), 2, "0");
+                addressArray[23] = pad(hash4[2].toString(16), 2, "0");
+                addressArray[24] = pad(hash4[3].toString(16), 2, "0");
+
+                let address = addressArray.join('').toUpperCase();
+
+                let newAccount = {
+                    wallet: address,
+                    seed: seed.toString("hex").toUpperCase(),
+                    mnemonic: mnemonic,
+                    seedPassword: password,
+                    publicKey: keyPair.publicKey.toString("hex").toUpperCase(),
+                    privateKey: keyPair.privateKey.toString("hex").toUpperCase()
+                };
+            
+                return newAccount;
+
+            } catch (e) {
+                return false;
+            }
+            
+        }
+    
     }
 
 }

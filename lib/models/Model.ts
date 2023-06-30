@@ -219,6 +219,9 @@ export const peerSchema = new Schema({
     lastHeight: {
         type: Number
     },
+    networkName: {
+        type: String
+    },
     createdAt: {
         type: Number,
         default: Date.now

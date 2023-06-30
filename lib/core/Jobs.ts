@@ -405,7 +405,7 @@ export class PandaniteJobs{
     public async printPeeringInfo() {
 
         logger.info("----===== Active Peers (" + this.activePeers.length + ") =====----");
-
+        logger.info("NetworkName: " + globalThis.networkName);
         logger.info("BlockHeight: " + this.myBlockHeight);
         logger.info("Difficulty: " + this.difficulty);
 
@@ -476,6 +476,8 @@ export class PandaniteJobs{
 
                                     if (!jsondata || parseInt(jsondata.current_block) === 0) throw new Error('Bad Peer');
 
+                                    if (jsondata.network_name != globalThis.networkName) throw new Error('Bad Peer NetworkName');
+
                                     that.peerVersions[peer] = 2; // assumed since this is ws
             
                                     if (!that.activePeers.includes(peer))
@@ -498,6 +500,7 @@ export class PandaniteJobs{
                                             lastSeen: Date.now(),
                                             isActive: true,
                                             lastHeight: parseInt(jsondata.current_block),
+                                            networkName: globalThis.networkName,
                                             createdAt: Date.now(),
                                             updatedAt: Date.now()
                                         });
@@ -517,6 +520,7 @@ export class PandaniteJobs{
                                             lastSeen: Date.now(),
                                             isActive: true,
                                             lastHeight: parseInt(jsondata.current_block),
+                                            networkName: globalThis.networkName,
                                             createdAt: Date.now(),
                                             updatedAt: Date.now()
                                         });
@@ -577,6 +581,8 @@ logger.warn(e);
 
                                         if (!jsondata || parseInt(jsondata.current_block) === 0) throw new Error('Bad Peer');
 
+                                        if (jsondata.network_name != globalThis.networkName) throw new Error('Bad Peer NetworkName');
+
                                         that.peerVersions[peer] = 2; // assumed since this is ws
                 
                                         if (!that.activePeers.includes(peer))
@@ -599,6 +605,7 @@ logger.warn(e);
                                                 lastSeen: Date.now(),
                                                 isActive: true,
                                                 lastHeight: parseInt(jsondata.current_block),
+                                                networkName: globalThis.networkName,
                                                 createdAt: Date.now(),
                                                 updatedAt: Date.now()
                                             });
@@ -618,6 +625,7 @@ logger.warn(e);
                                                 lastSeen: Date.now(),
                                                 isActive: true,
                                                 lastHeight: parseInt(jsondata.current_block),
+                                                networkName: globalThis.networkName,
                                                 createdAt: Date.now(),
                                                 updatedAt: Date.now()
                                             });
@@ -711,6 +719,8 @@ logger.warn(e);
 
                         if (!data || parseInt(data.current_block) === 0) throw new Error('Bad Peer');
 
+                        if (data.network_name && data.network_name != globalThis.networkName) throw new Error('Bad Peer NetworkName');
+
                         if (data && data.node_version)
                         {
                             let splitVersion = data.node_version.split(".");
@@ -744,6 +754,7 @@ logger.warn(e);
                                 lastSeen: Date.now(),
                                 isActive: true,
                                 lastHeight: parseInt(data.current_block),
+                                networkName: globalThis.networkName,
                                 createdAt: Date.now(),
                                 updatedAt: Date.now()
                             });
@@ -763,6 +774,7 @@ logger.warn(e);
                                 lastSeen: Date.now(),
                                 isActive: true,
                                 lastHeight: parseInt(data.current_block),
+                                networkName: globalThis.networkName,
                                 createdAt: Date.now(),
                                 updatedAt: Date.now()
                             });
@@ -838,16 +850,30 @@ logger.warn(e);
                             if (havePeer == 0)
                             {
 
-                                await Peer.create({
-                                    url: peer,
-                                    ipAddress: splitPeer[0],
-                                    port: splitPeer[1],
-                                    lastSeen: 0,
-                                    isActive: true,
-                                    lastHeight: 0,
-                                    createdAt: Date.now(),
-                                    updatedAt: Date.now()
+                                const peerresponse = await axios({
+                                    url: thisPeer + "/name",
+                                    method: 'get',
+                                    responseType: 'json'
                                 });
+            
+                                const data = peerresponse.data;
+
+                                if (data.networkName == globalThis.networkName)
+                                {
+
+                                    await Peer.create({
+                                        url: peer,
+                                        ipAddress: splitPeer[0],
+                                        port: splitPeer[1],
+                                        lastSeen: 0,
+                                        isActive: true,
+                                        lastHeight: 0,
+                                        networkName: globalThis.networkName,
+                                        createdAt: Date.now(),
+                                        updatedAt: Date.now()
+                                    });
+
+                                }
         
                             }
 
@@ -1075,7 +1101,9 @@ logger.warn(e);
             // Poor previous design requires this :(
             const excludedTransactions = [
                 "9B756E997F65772E54804D1373B5C6AEBB35555C61FDB0AA1AA54E47DDF1D2BE",
-                "01703A6C8F63E0808FDA4BD79C773F99BDB724679009E94B6930CE8846817CDD"
+                "01703A6C8F63E0808FDA4BD79C773F99BDB724679009E94B6930CE8846817CDD",
+                "ED1730F04A28C218BAB179DF6D577C4893519F070FA1F80B9D9D06A27DB082CE",
+                "A5E0D39CDF60989D9B688A9776B3AE7B279404B21A4024A6353B0A2AC6B34486"
             ];
 
             // Check Balances
@@ -1109,22 +1137,34 @@ logger.warn(e);
 
                         if (!tokenInfo) isValid = false;
 
-                        // get address balance
-                        const balanceInfo = await Balance.findOne({addressString: thisTrx.from, token: tokenInfo._id});
+                        // get address native balance
+                        const balanceInfo = await Balance.findOne({addressString: thisTrx.from, token: null});
 
-                        if (!balanceInfo) 
+                        // get address token balance
+                        const tokenBalanceInfo = await Balance.findOne({addressString: thisTrx.from, token: tokenInfo._id});
+
+                        if (!balanceInfo || !tokenBalanceInfo) 
                         {
                             isValid = false;
                         }
                         else
                         {
-                            const totalTxAmount = Big(thisTrx.amount).plus(thisTrx.fee).toFixed();
+                            const txFeeAmount = Big(thisTrx.fee).toFixed();
 
-                            if (Big(totalTxAmount).gt(balanceInfo.balance))
+                            if (Big(txFeeAmount).gt(balanceInfo.balance))
                             {
-                                logger.warn("Transaction Amount Exceeds Account Balance " + thisTrx.txid + " Value: " + totalTxAmount + " >  Balance: " + balanceInfo.balance);
+                                logger.warn("Transaction Amount Exceeds Account Native Balance " + thisTrx.txid + " FeeValue: " + txFeeAmount + " >  Balance: " + balanceInfo.balance);
                                 isValid = false;
                             }
+
+                            const tokenAmount = Big(thisTrx.tokenAmount).toFixed();
+
+                            if (Big(tokenAmount).gt(tokenBalanceInfo.balance))
+                            {
+                                logger.warn("Transaction Amount Exceeds Account Token Balance " + thisTrx.txid + " Value: " + tokenAmount + " >  Balance: " + tokenBalanceInfo.balance);
+                                isValid = false;
+                            }
+
                         }
                     }
                 }

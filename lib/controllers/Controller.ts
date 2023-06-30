@@ -116,6 +116,7 @@ export class ApiController{
         try {
 
             const stats = {
+                network_name: globalThis.networkName || "mainnet",
                 current_block: lastBlock.height || 0,
                 last_block_time: lastBlock.timestamp || 0,
                 node_version: globalThis.appVersion,
@@ -185,6 +186,7 @@ export class ApiController{
         try {
 
             const response = {
+                network_name: globalThis.networkName || "mainnet",
                 current_block: lastBlock.height || 0,
                 last_block_time: lastBlock.timestamp || 0,
                 node_version: globalThis.appVersion,
@@ -238,7 +240,7 @@ export class ApiController{
 
         try {
 
-            let block = await Block.findOne({height: req.query.blockId}); 
+            let block = await Block.findOne({height: parseInt(req.query.blockId.toString())}); 
 
             if (!block) 
             {
@@ -367,40 +369,119 @@ export class ApiController{
     // Transaction Queue - Mempool
     public async getTxJson (req: Request, res: Response) { 
 
-        const memPool = await Mempool.find();
+        try {
 
-        const response = [];
+            const memPool = await Mempool.find();
 
-        for (let i = 0; i < memPool.length; i++)
-        {
-            const thistx = memPool[i];
+            const response = [];
 
-            response.push({
-                type: thistx.type,
-                token: thistx.token,
-                tokenAmount: thistx.token?thistx.amount:null,
-                amount: thistx.token?0:thistx.amount,
-                fee: thistx.fee,
-                from: thistx.from,
-                to: thistx.to,
-                signature: thistx.signature,
-                signingKey: thistx.signingKey,
-                timestamp: thistx.nonce,
-                nonce: thistx.nonce,
-                txid:  thistx.hash
-            });
+            for (let i = 0; i < memPool.length; i++)
+            {
+                const thistx = memPool[i];
+
+                response.push({
+                    type: thistx.type,
+                    token: thistx.token,
+                    tokenAmount: thistx.token?thistx.amount:null,
+                    amount: thistx.token?0:thistx.amount,
+                    fee: thistx.fee,
+                    from: thistx.from,
+                    to: thistx.to,
+                    signature: thistx.signature,
+                    signingKey: thistx.signingKey,
+                    timestamp: thistx.nonce,
+                    nonce: thistx.nonce,
+                    txid:  thistx.hash
+                });
+            }
+
+            res.json(response);
+
+        } catch (e) {
+
+            res.json([]);
+
         }
 
-        return response;
+    }
+
+    // input is blockId in query
+    public async getMineStatus (req: Request, res: Response) { 
+
+        let result = {};
+
+        if (req.query.blockid)
+        {
+            const blockId = parseInt(req.query.blockId.toString());
+
+            const blockInfo = await Block.findOne({height: blockId});
+
+            if (blockInfo)
+            {
+                const minerTx = await Transaction.findOne({block: blockInfo._id, isGenerate: true}).populate('toAddress');
+
+                const qfees = await Transaction.aggregate([
+                    {
+                      $match: {block: blockInfo._id},
+                    },{
+                      $group: {
+                        _id: null,
+                        total: {
+                          $sum:  "$fee"
+                        }
+                      }
+                    }]
+                );
+        
+                let totalfee = Big(0).toFixed();
+        
+                if (qfees[0] && qfees[0].total)
+                    totalfee = Big(qfees[0].total).toFixed(0);
+
+                result["minerWallet"] = minerTx.toAddress.address;
+                result["mintFee"] = minerTx.amount;
+                result["txFees"] = parseInt(totalfee);
+                result["timestamp"] = blockInfo.timestamp;
+            }
+            else
+            {
+                result["error"] = "Invalid Block";
+            }
+        }
+        else
+        {
+            result["error"] = "Invalid Block";
+        }
+
+        res.json(result);
 
     }
 
-    // 
-    public getMineStatus (req: Request, res: Response) { 
+    // Aka get balance
+    public async getLedger (req: Request, res: Response) { 
 
-    }
+        try {
 
-    public getLedger (req: Request, res: Response) { 
+            let ledgerBalance = 0;
+
+            if (req.query.wallet && req.query.token)
+            {
+                const balance = await Balance.findOne({addressString: req.query.wallet.toString(), tokenString: req.query.token.toString()});
+                ledgerBalance = balance.balance;
+            }
+            else if (req.query.wallet)
+            {
+                const balance = await Balance.findOne({addressString: req.query.wallet.toString(), token: null});
+                ledgerBalance = balance.balance;
+            }
+
+            res.json({balance: ledgerBalance});
+
+        } catch (e) {
+
+            res.json({balance: 0});
+
+        }
 
     }
 
@@ -420,8 +501,59 @@ export class ApiController{
 
     }
 
-    public addPeer (req: Request, res: Response) { 
+    // JSON body post
+    public async addPeer (req: Request, res: Response) { 
 
+        try {
+
+            let peerInfo = JSON.parse(req.body);
+
+console.log("got call to post /add_peer");
+console.log(peerInfo);
+
+            if (!peerInfo.networkName) peerInfo.networkName = 'mainnet';
+
+            if (globalThis.networkName !== peerInfo.networkName) return;
+
+            let thisPeer = peerInfo.address;
+
+            let stripPeer = thisPeer.replace('http://', '');
+            let splitPeer = stripPeer.split(":");
+
+            if (!["localhost", "127.0.0.1"].includes(splitPeer[0])) // don't peer with yourself.
+            {
+
+                let havePeer = await Peer.countDocuments({url: thisPeer});
+
+                if (havePeer == 0)
+                {
+
+                    await Peer.create({
+                        url: thisPeer,
+                        ipAddress: splitPeer[0],
+                        port: splitPeer[1],
+                        lastSeen: 0,
+                        isActive: true,
+                        lastHeight: 0,
+                        networkName: peerInfo.networkName,
+                        createdAt: Date.now(),
+                        updatedAt: Date.now()
+                    });
+
+                }
+
+            }
+
+        } catch (e) {
+
+
+        }
+
+        /*
+                    if (!peerInfo.contains("networkName")) peerInfo["networkName"] = "mainnet";
+                    json result = manager.addPeer(peerInfo["address"], peerInfo["time"], peerInfo["version"], peerInfo["networkName"]);
+                    res->writeHeader("Content-Type", "application/json; charset=utf-8")->end(result.dump());
+        */
     }
 
     public submitBlock (req: Request, res: Response) { 
@@ -447,12 +579,31 @@ export class ApiController{
 
     public createWallet (req: Request, res: Response) { 
 
+        let newWallet;
+
+        if (req.query.password)
+        {
+            let password = req.query.password.toString();
+            newWallet = PandaniteCore.generateNewAddress(password);
+        }
+        else
+        {
+            newWallet = PandaniteCore.generateNewAddress("");
+        }
+
+        res.json(newWallet);
+
     }
 
+    // json body
     public createTransaction (req: Request, res: Response) { 
 
+
+
+
     }
 
+    // binary - peers
     public addTransaction (req: Request, res: Response) { 
 
         console.log("addTransaction REST endpoint called")
@@ -460,6 +611,7 @@ export class ApiController{
 
     }
 
+    // json body
     public addTransactionJson (req: Request, res: Response) { 
 
         console.log("addTransactionJson REST endpoint called")
@@ -526,9 +678,9 @@ export class ApiController{
 
     }
 
-    // NEW Rest API Endpoints
+    // NEW API Endpoints
 
-    // Get single onchain tx
+    // Get single onchain tx rest api
     public async getTransaction (req: Request, res: Response) { 
 
         if (!req.query || !req.query.txid) {
@@ -540,7 +692,7 @@ export class ApiController{
         const lastBlock = await Block.find().sort({height: -1}).limit(1);
         const lastBlockHeight = lastBlock[0]?.height || 0;
 
-        const txInfo = await Transaction.findOne({txid: req.query.txid}).populate('block').populate("fromAddress").populate("toAddress").populate("token");
+        const txInfo = await Transaction.findOne({txid: req.query.txid.toString()}).populate('block').populate("fromAddress").populate("toAddress").populate("token");
 
         if (txInfo)
         {

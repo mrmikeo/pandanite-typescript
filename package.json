@@ -28,6 +28,7 @@
     "@types/underscore": "^1.11.5",
     "axios": "^1.4.0",
     "big.js": "^6.2.1",
+    "bip39": "^3.1.0",
     "body-parser": "^1.20.2",
     "cors": "^2.8.5",
     "crypto-js": "^4.1.1",
