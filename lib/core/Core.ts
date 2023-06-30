@@ -149,7 +149,7 @@ export class PandaniteCore{
 
             // Validate Block Time
             if (block.id !== 1) {
-                
+
                 // block must be less than 2 hrs into the future from network time
                 const maxTime: number = networkTimestamp + (120 * 60)
                 if (block.timestamp > maxTime)
@@ -182,9 +182,7 @@ export class PandaniteCore{
             const actualMerkleHash = PandaniteCore.checkMerkleTree(block.transactions);
 
             if (expectedMerkleHash !== actualMerkleHash) {
-                console.log("Merkle Root Expected: " + expectedMerkleHash);
-                console.log("Merkle Root Actual: " + actualMerkleHash);
-                reject("checkBlockHash failed at Validate MerkleTree");
+                reject("checkBlockHash failed at Validate MerkleTree " + actualMerkleHash + " != " + expectedMerkleHash);
             }
 
             // Validate Blockhash
@@ -192,9 +190,7 @@ export class PandaniteCore{
             const actualBlockHash = PandaniteCore.getBlockHash(block).toUpperCase();
 
             if (expectedBlockHash !== actualBlockHash) {
-                console.log("Block Hash Expected: " + expectedBlockHash);
-                console.log("Block Hash Actual: " + actualBlockHash);
-                reject("checkBlockHash failed at Validate Blockhash");
+                reject("checkBlockHash failed at Validate Blockhash " + actualBlockHash + " != " + expectedBlockHash);
             }
 
             // Check Nonce

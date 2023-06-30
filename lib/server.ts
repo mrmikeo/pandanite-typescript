@@ -1,9 +1,23 @@
 import app from './app';
-import * as fs from 'fs';
 import * as minimist from 'minimist';
 import * as WebSocket from 'ws';
 import * as http from 'http';
 import { WebSocketProcessor } from './routes/WebSocketProcessor';
+import { createLogger, format, transports } from 'winston';
+const { combine, timestamp, label, printf } = format;
+
+const myFormat = printf(({ level, message, timestamp }) => {
+  return `${timestamp} ${level}: ${message}`;
+});
+
+const logger = createLogger({
+  format: combine(
+  	format.colorize(),
+    timestamp(),
+    myFormat
+  ),
+  transports: [new transports.Console()]
+});
 
 const argv = minimist(process.argv.slice(1));
 
@@ -61,7 +75,7 @@ process.on('SIGINT', function() {
     
 		var shutdowncheck = setInterval(function() {
 			
-			console.log('Checking if shutdown is safe... ' + globalThis.safeToShutdown.toString());
+			logger.warn('Checking if shutdown is safe... ' + globalThis.safeToShutdown.toString());
 
 			if (globalThis.safeToShutdown == true)
 			{
@@ -76,7 +90,8 @@ process.on('SIGINT', function() {
 
 server.listen(PORT, () => {
 
-    console.log(`    Pandanite Node v` + globalThis.appVersion);
+    console.log(`    @*******************************************************************************`);
+    console.log(`                      Pandanite Node v` + globalThis.appVersion);
     console.log(`    @*******************************************************************************
     @*******************************************************************************
     @*******************************************************************************
@@ -110,5 +125,5 @@ server.listen(PORT, () => {
     @*******************************************************************************
     @*******************************************************************************`);
 
-    console.log('Pandanite node listening on port ' + PORT);
+    logger.info('Pandanite node listening on port ' + PORT);
 })

@@ -8,6 +8,22 @@ import * as minimist from 'minimist';
 import * as WebSocket from 'ws';
 import { v4 as uuidv4 } from 'uuid';
 
+import { createLogger, format, transports } from 'winston';
+const { combine, timestamp, label, printf } = format;
+
+const myFormat = printf(({ level, message, timestamp }) => {
+  return `${timestamp} ${level}: ${message}`;
+});
+
+const logger = createLogger({
+  format: combine(
+  	format.colorize(),
+    timestamp(),
+    myFormat
+  ),
+  transports: [new transports.Console()]
+});
+
 const Transaction = mongoose.model('Transaction', transactionSchema);
 const Address = mongoose.model('Address', addressSchema);
 const Balance = mongoose.model('Balance', balanceSchema);
@@ -136,8 +152,7 @@ class QueueProcessor<T> {
     }
 
     private defaultWorkerFunction: Worker<T> = async (hostname, item) => {
-      console.log(`Worker ${hostname} processing item: ${item}`);
-      await new Promise((resolve) => setTimeout(resolve, 1000));
+      await new Promise((resolve) => setTimeout(resolve, 10));
     };
 }
 
@@ -196,18 +211,20 @@ export class PandaniteJobs{
             await Balance.deleteMany();
             await Token.deleteMany();
             await Peer.deleteMany();
-            console.log("Chain is reset");
+            logger.warn("Chain is reset");
         }
 
         if (argv.resetpeers === true) // reset chain
         {
             await Peer.deleteMany();
-            console.log("Peers is reset");
+            logger.warn("Peers is reset");
         }
 
-        const response = await axios.get('http://api.ipify.org/')
-        console.log("My public IP address is: " + response.data);
-        this.myIpAddress = response.data;
+        try {
+            const response = await axios.get('http://api.ipify.org/')
+            logger.info("My public IP address is: " + response.data);
+            this.myIpAddress = response.data;
+        } catch (e) {}
 
         // start jobs for syncing peers list & blocks
 
@@ -333,11 +350,11 @@ export class PandaniteJobs{
 
         this.myBlockHeight = height;
 
-console.log("My block height is " + height);
+        logger.info("My block height is " + height);
 
         const lastDiffHeight = Math.floor(height/Constants.DIFFICULTY_LOOKBACK)*Constants.DIFFICULTY_LOOKBACK;
 
-console.log("Last diff height is " + lastDiffHeight);
+        logger.info("Last diff height is " + lastDiffHeight);
 
         await this.updateDifficultyForHeight(lastDiffHeight);
 
@@ -387,19 +404,19 @@ console.log("Last diff height is " + lastDiffHeight);
 
     public async printPeeringInfo() {
 
-        console.log("----===== Active Peers (" + this.activePeers.length + ") =====----");
+        logger.info("----===== Active Peers (" + this.activePeers.length + ") =====----");
 
-        console.log("BlockHeight: " + this.myBlockHeight);
-        console.log("Difficulty: " + this.difficulty);
+        logger.info("BlockHeight: " + this.myBlockHeight);
+        logger.info("Difficulty: " + this.difficulty);
 
         for (let i = 0; i < this.activePeers.length; i++)
         {
             let thisPeerHeight = this.peerHeights[this.activePeers[i]] || 0;
             let thisPeerVersion = this.peerVersions[this.activePeers[i]] || 1;
-            console.log(this.activePeers[i] + " - BlockHeight: " + thisPeerHeight + " - Version: " + thisPeerVersion);
+            logger.info(this.activePeers[i] + " - BlockHeight: " + thisPeerHeight + " - Version: " + thisPeerVersion);
         }
 
-        console.log("-----------------------------------");
+        logger.info("-----------------------------------");
 
         return true;
 
@@ -517,7 +534,7 @@ console.log("Last diff height is " + lastDiffHeight);
                                     delete that.wsRespFunc[messageId];
 
                                 } catch (e) {
-console.log(e);
+logger.warn(e);
                                     delete that.wsRespFunc[messageId];
                                 }
 
@@ -618,7 +635,7 @@ console.log(e);
                                         delete that.wsRespFunc[messageId];
 
                                     } catch (e) {
-console.log(e);
+logger.warn(e);
                                         delete that.wsRespFunc[messageId];
                                     }
 
@@ -646,14 +663,14 @@ console.log(e);
 
                                 } catch (e) {
 
-console.log(e);
+logger.warn(e);
 
                                 }
                             });
 
                             client.on('close', function close() {
 
-                                console.log('ws disconnected from peer: ' + peer);
+                                logger.warn('Websocket disconnected from peer: ' + peer);
 
                                 // cleanup any open respfunc
                                 const peerHex = that.stringToHex(peer);
@@ -677,7 +694,7 @@ console.log(e);
 
                         } catch (e) {
 
-console.log(e);
+logger.warn(e);
 
                         }
 
@@ -793,12 +810,9 @@ console.log(e);
 
         this.activePeers.forEach(peer => {
 
-//console.log(peer);
-
             (async () => {
 
                 try {
-
 
                     const response = await axios({
                         url: peer + "/peers",
@@ -808,7 +822,6 @@ console.log(e);
 
                     const data = response.data;
 
-//console.log(data);
                     for (let i = 0; i < data.length; i++)
                     {
 
@@ -929,7 +942,7 @@ console.log(e);
                     delete this.downloadedBlocks[nextHeight];
                     nextHeight++;
                 } catch (e) {
-                    console.log(e);
+logger.warn(e);
                     delete this.downloadedBlocks[nextHeight];
                     const previousHeight = nextHeight - 1;
                     await this.doBlockRollback(previousHeight);
@@ -955,7 +968,7 @@ console.log(e);
 
         return new Promise<boolean>(async (resolve, reject) => {
 
-            console.log("Rolling back block #" + height);
+            logger.warn("Rolling back block #" + height);
 
             const blockInfo = await Block.findOne({height: height}).populate("transactions");
 
@@ -994,11 +1007,11 @@ console.log(e);
 
                 // in case of fail above, then we should start over or at least run a recompute on the chain...
 
-                console.log(blockInfo);
+                logger.warn(blockInfo);
 
-                console.log(e);
+                logger.warn(e);
 
-                console.log("Caught error on rollback.  EXIT")
+                logger.warn("Caught error on rollback.  EXIT")
 
                 process.exit(-1);
 
@@ -1055,12 +1068,11 @@ console.log(e);
             try {
                 isValid = await PandaniteCore.checkBlockValid(block, lastBlock.blockHash, lastBlock.height, this.difficulty, networkTimestamp, medianTimestamp);
             } catch (e) {
-                console.log(e);
+                logger.warn(e);
                 throw new Error(e);
             }
 
             // Check Balances
-
             for (let i = 0; i < block.transactions.length; i++)
             {
                 const thisTrx = block.transactions[i];
@@ -1073,9 +1085,11 @@ console.log(e);
                         // get address balance
                         const balanceInfo = await Balance.findOne({addressString: thisTrx.from, token: null});
 
-                        if (Big(thisTrx.amount).gt(balanceInfo.balance))
+                        const totalTxAmount = Big(thisTrx.amount).plus(thisTrx.fee).toFixed();
+
+                        if (Big(totalTxAmount).gt(balanceInfo.balance))
                         {
-                            console.log("Transaction Amount Exceeds Account Balance " + thisTrx.txid);
+                            logger.warn("Transaction Amount Exceeds Account Balance " + thisTrx.txid + " Value: " + totalTxAmount + " >  Balance: " + balanceInfo.balance);
                             isValid = false;
                         }
                     }
@@ -1097,7 +1111,7 @@ console.log(e);
             try {
                 isValid = await PandaniteCore.checkBlockValid(block, "0000000000000000000000000000000000000000000000000000000000000000", 0, this.difficulty, networkTimestamp, medianTimestamp);
             } catch (e) {
-                console.log(e);
+                logger.warn(e);
                 throw new Error(e);
             }
 
@@ -1198,8 +1212,7 @@ console.log(e);
 
                 if (thisTx.from !== "00000000000000000000000000000000000000000000000000" && thisTx.from !== "")
                 {
-                    const numbernegative = transactionAmount * -1;
-                    await Balance.updateOne({address: fromAddress._id, token: tokenId}, {$inc: {balance: numbernegative}});
+                    await Balance.updateOne({address: fromAddress._id, token: tokenId}, {$inc: {balance: -transactionAmount}});
                 }
 
                 const haveToBalance = await Balance.findOne({address: toAddress._id, token: tokenId});
@@ -1230,7 +1243,7 @@ console.log(e);
 
             await this.updateDifficulty();
 
-            console.log("Imported Block #" + block.id);
+            logger.info("Imported Block #" + block.id);
 
             return true;
 
@@ -1267,7 +1280,7 @@ console.log(e);
           this.difficulty = Constants.MIN_DIFFICULTY;
         }
 
-        console.log("New Difficulty: " + this.difficulty);
+        logger.info("New Difficulty: " + this.difficulty);
 
         return true;
 
@@ -1298,7 +1311,7 @@ console.log(e);
             this.difficulty = Constants.MIN_DIFFICULTY;
         }
 
-        console.log("New Difficulty: " + this.difficulty);
+        logger.info("New Difficulty: " + this.difficulty);
 
         return true;
 
