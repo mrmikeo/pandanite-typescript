@@ -317,13 +317,13 @@ export class PandaniteJobs{
     
                 delete this.downloadedBlocks[height];
                 this.queueProcessor.removeWorker(thisPeer);
-                this.queueProcessor.enqueue(height);
+                this.queueProcessor.requeue(height);
     
             }
 
         };
 
-        // Start the queue processor
+        // Start the queue processor for downloading blocks
         this.queueProcessor.addFunction(workerFunction);
 
         const myHeight = await Block.find().sort({height: -1}).limit(1);
