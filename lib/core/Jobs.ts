@@ -433,7 +433,7 @@ export class PandaniteJobs{
         for (let i = 0; i < peerList.length; i++)
         {
             let thisPeer = peerList[i];
-            if (this.pendingPeers.indexOf("http://" + thisPeer.ipAddress + ":" + thisPeer.port) === -1)
+            if (!this.pendingPeers.includes("http://" + thisPeer.ipAddress + ":" + thisPeer.port))
                 this.pendingPeers.push("http://" + thisPeer.ipAddress + ":" + thisPeer.port);
         }
 
@@ -478,7 +478,7 @@ export class PandaniteJobs{
 
                                     that.peerVersions[peer] = 2; // assumed since this is ws
             
-                                    if (that.activePeers.indexOf(peer) === -1)
+                                    if (!that.activePeers.includes(peer))
                                         that.activePeers.push(peer);
             
                                     that.peerHeights[peer] = parseInt(jsondata.current_block);
@@ -579,7 +579,7 @@ logger.warn(e);
 
                                         that.peerVersions[peer] = 2; // assumed since this is ws
                 
-                                        if (that.activePeers.indexOf(peer) === -1)
+                                        if (!that.activePeers.includes(peer))
                                             that.activePeers.push(peer);
                 
                                         that.peerHeights[peer] = parseInt(jsondata.current_block);
@@ -724,7 +724,7 @@ logger.warn(e);
                             this.peerVersions[peer] = 1;
                         }
 
-                        if (this.activePeers.indexOf(peer) === -1)
+                        if (!this.activePeers.includes(peer))
                             this.activePeers.push(peer);
 
                         this.peerHeights[peer] = parseInt(data.current_block);
@@ -830,7 +830,7 @@ logger.warn(e);
                         let stripPeer = thisPeer.replace('http://', '');
                         let splitPeer = stripPeer.split(":");
 
-                        if (["localhost", "127.0.0.1", this.myIpAddress].indexOf(splitPeer[0]) == -1) // don't peer with yourself.
+                        if (!["localhost", "127.0.0.1", this.myIpAddress].includes(splitPeer[0])) // don't peer with yourself.
                         {
 
                             let havePeer = await Peer.countDocuments({url: thisPeer});
@@ -1079,7 +1079,7 @@ logger.warn(e);
             for (let i = 0; i < block.transactions.length; i++)
             {
                 const thisTrx = block.transactions[i];
-                if (excludedTransactions.indexOf(thisTrx.hash) === -1 && thisTrx.from && thisTrx.from != "00000000000000000000000000000000000000000000000000")
+                if (!excludedTransactions.includes(thisTrx.hash) && thisTrx.from && thisTrx.from != "00000000000000000000000000000000000000000000000000")
                 {
                     if (!thisTrx.type || thisTrx.type === 0)
                     {
