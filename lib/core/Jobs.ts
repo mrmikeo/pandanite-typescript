@@ -1073,7 +1073,10 @@ logger.warn(e);
             }
 
             // Poor previous design requires this :(
-            const excludedTransactions = ["9B756E997F65772E54804D1373B5C6AEBB35555C61FDB0AA1AA54E47DDF1D2BE"];
+            const excludedTransactions = [
+                "9B756E997F65772E54804D1373B5C6AEBB35555C61FDB0AA1AA54E47DDF1D2BE",
+                "01703A6C8F63E0808FDA4BD79C773F99BDB724679009E94B6930CE8846817CDD"
+            ];
 
             // Check Balances
             for (let i = 0; i < block.transactions.length; i++)
