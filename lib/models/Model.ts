@@ -284,3 +284,4 @@ export const mempoolSchema = new Schema({
 });
 
 mempoolSchema.index({ hash: 1 });
+mempoolSchema.index({ from: 1 });

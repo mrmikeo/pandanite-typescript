@@ -49,14 +49,14 @@ export class Routes {
         app.route('/getnetworkhashrate')
         .get(this.apiController.getNetworkHashRate) 
 
-        app.route('/gettx')
-        .get(this.apiController.getTx) 
-
         app.route('/sync')
         .get(this.apiController.getSync) 
 
         app.route('/block_headers')
         .get(this.apiController.getBlockHeaders) 
+
+        app.route('/gettx')
+        .get(this.apiController.getSyncTx) 
 
         app.route('/synctx')
         .get(this.apiController.getSyncTx) 

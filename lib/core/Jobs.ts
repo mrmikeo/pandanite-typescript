@@ -9,6 +9,7 @@ import * as WebSocket from 'ws';
 import { v4 as uuidv4 } from 'uuid';
 
 import { createLogger, format, transports } from 'winston';
+import { keys } from 'underscore';
 const { combine, timestamp, label, printf } = format;
 
 const myFormat = printf(({ level, message, timestamp }) => {
@@ -220,6 +221,40 @@ export class PandaniteJobs{
             logger.warn("Peers is reset");
         }
 
+        const myHeight = await Block.find().sort({height: -1}).limit(1);
+
+        let height = 0;
+        if (myHeight.length > 0) height = myHeight[0].height;
+
+        this.myBlockHeight = height;
+
+        if (argv.rollback && parseInt(argv.rollback) > 0)
+        {
+
+            for (let i = height; i > height - parseInt(argv.rollback); i--)
+            {
+                await this.doBlockRollback(i);
+            }
+
+        }
+
+        if (argv.revalidate === true)
+        {
+
+            // In this case we won't redownload the chain, but instead clear all balances and revalidate from the database records 
+            // this will go as far as it can validate.  any invalid will stop and clear any blocks above last valid
+
+            await this.revalidateBlockchain();
+
+            const newHeight = await Block.find().sort({height: -1}).limit(1);
+            height = 0;
+            if (newHeight.length > 0) height = newHeight[0].height;
+
+        }
+
+        // clear mempool
+        await Mempool.deleteMany();
+
         try {
             const response = await axios.get('http://api.ipify.org/')
             logger.info("My public IP address is: " + response.data);
@@ -343,13 +378,6 @@ export class PandaniteJobs{
         // Start the queue processor for downloading blocks
         this.queueProcessor.addFunction(workerFunction);
 
-        const myHeight = await Block.find().sort({height: -1}).limit(1);
-
-        let height = 0;
-        if (myHeight.length > 0) height = myHeight[0].height;
-
-        this.myBlockHeight = height;
-
         logger.info("My block height is " + height);
 
         const lastDiffHeight = Math.floor(height/Constants.DIFFICULTY_LOOKBACK)*Constants.DIFFICULTY_LOOKBACK;
@@ -390,6 +418,393 @@ export class PandaniteJobs{
     public async checkLocks() {
 
         // TODO
+
+    }
+
+    public async revalidateBlockchain() {
+
+        await Balance.deleteMany();
+
+        const allBlocks = await Block.find().sort({height: 1});
+
+        let lastBlockHash = "0000000000000000000000000000000000000000000000000000000000000000";
+        let lastBlockHeight = 0;
+        this.difficulty = 16; // Starting diff
+
+        for (let i = 0; i < allBlocks.length; i++)
+        {
+
+            let isValid = false;
+
+            const block = allBlocks[i];
+
+            let blockinfo = {
+                difficulty: block.difficulty,
+                hash: block.blockHash,
+                id: block.height,
+                lastBlockHash: block.lastBlockHash,
+                merkleRoot: block.merkleRoot,
+                nonce: block.nonce,
+                timestamp: block.timestamp,
+                transactions: []
+            };
+
+            const transactions = await Transaction.find({block: block._id}).populate("fromAddress").populate("toAddress").populate("token").sort({blockIndex: 1}); 
+
+            for (let i = 0; i < transactions.length; i++)
+            {
+                let thistx = transactions[i];
+
+                let tx = {
+                    type: thistx.type,
+                    amount: thistx.amount,
+                    fee: thistx.fee,
+                    from: thistx.fromAddress.address,
+                    to: thistx.toAddress.address,
+                    timestamp: thistx.nonce,
+                    nonce: thistx.nonce,
+                    txid:  thistx.hash
+                }
+
+                if (thistx.signature)
+                {
+                    tx["signature"] = thistx.signature;
+                }
+
+                if (thistx.signingKey)
+                {
+                    tx["signingKey"] = thistx.signingKey;
+                }
+
+                if (thistx.token)
+                {
+                    tx["token"] = thistx.token.transaction;
+                    tx["tokenAmount"] = thistx.amount;
+                    tx["amount"] = 0;
+                }
+
+                blockinfo.transactions.push(tx);
+
+                let toAddress = await Address.findOne({address: tx.to.toUpperCase()});
+                let fromAddress = await Address.findOne({address: tx.from.toUpperCase()});
+
+                if (!toAddress)
+                {
+                    toAddress = await Address.create({
+                        address: tx.to.toUpperCase(),
+                        publicKey: "",
+                        createdAt: Date.now(),
+                        updatedAt: Date.now()
+                    });
+                }
+
+                if (!fromAddress)
+                {
+                    fromAddress = await Address.create({
+                        address: tx.from.toUpperCase(),
+                        publicKey: thistx.signingKey?thistx.signingKey.toUpperCase():"",
+                        createdAt: Date.now(),
+                        updatedAt: Date.now()
+                    });
+                }
+                else if ((!fromAddress.publicKey || fromAddress.publicKey == "") && thistx.signingKey)
+                {
+                    await Address.updateOne({_id: fromAddress._id}, {$set: {publicKey: thistx.signingKey.toUpperCase()}});
+                }
+
+            }
+
+            let medianTimestamp = 0;
+            if (lastBlockHeight > 10) {
+                const times: Array<number> = [];
+
+                // get last 10 blocktimes
+                const tenBlocks = await Block.find({height: {$gt: lastBlockHeight - 10}}).sort({height: -1});
+                for (let i = 0; i < tenBlocks.length; i++) {
+                  times.push(parseInt(tenBlocks[i].timestamp));
+                }
+                times.sort((a, b) => a - b);
+
+                // compute median
+                if (times.length % 2 === 0) {
+                    medianTimestamp = (times[Math.floor(times.length / 2)] + times[Math.floor(times.length / 2) - 1]) / 2;
+                } else {
+                    medianTimestamp = times[Math.floor(times.length / 2)];
+                }
+            
+            }
+
+            let networkTimestamp = Math.round(Date.now()/1000);
+
+            try {
+                isValid = await PandaniteCore.checkBlockValid(block, lastBlockHash, lastBlockHeight, this.difficulty, networkTimestamp, medianTimestamp);
+            } catch (e) {
+                logger.warn(e);
+                isValid = false;
+            }
+
+            let expectedHeight = lastBlockHeight + 1;
+            
+            if (block.id != expectedHeight)
+            {
+                isValid = false;
+            }
+
+            if (isValid === true)
+            {
+
+                const validtrx = await Transaction.find({block: block._id}).populate("fromAddress").populate("toAddress").populate("token").sort({blockIndex: 1}); 
+
+                for (let i = 0; i < validtrx.length; i++)
+                {
+
+                    const thisTx = validtrx[i];
+
+                    const transactionAmount = thisTx.amount;
+
+                    if (thisTx.fromAddress.address !== "00000000000000000000000000000000000000000000000000" && thisTx.fromAddress.address !== "")
+                    {
+                        await Balance.updateOne({address: thisTx.fromAddress._id, token: thisTx.token}, {$inc: {balance: -transactionAmount}});
+                    }
+
+                    const haveToBalance = await Balance.findOne({address: thisTx.toAddress._id, token: thisTx.token});
+
+                    if (!haveToBalance)
+                    {
+
+                        let tokenString = null;
+
+                        if (thisTx.token)
+                        {
+                            tokenString = thisTx.token.tokenId.toUpperCase()
+                        }
+
+                        await Balance.create({
+                            address: thisTx.toAddress._id,
+                            token: thisTx.token?._id,
+                            addressString: thisTx.toAddress.address.toUpperCase(),
+                            tokenString: tokenString,
+                            balance: transactionAmount,
+                            createdAt: Date.now(),
+                            updatedAt: Date.now()
+                        });
+
+                    }
+                    else
+                    {
+                        await Balance.updateOne({address: thisTx.toAddress._id, token: thisTx.token?._id}, {$inc: {balance: transactionAmount}});
+                    }
+
+                }
+
+                this.myBlockHeight = block.height;
+
+                await this.updateDifficulty();
+
+                lastBlockHash = block.blockHash;
+                lastBlockHeight = block.height;
+
+            }
+            else
+            {
+
+                // Stop here and clear anything remaining for regular sync
+
+                const toDeleteBlocks = await Block.find({height: {$gt: lastBlockHeight}});
+                for (let i = 0; i < toDeleteBlocks.length; i++)
+                {
+                    const blockInfo = toDeleteBlocks[i];
+
+                    await Block.deleteOne({_id: blockInfo._id});
+                    await Transaction.deleteMany({block: blockInfo._id});
+
+                }
+
+
+            }
+
+        }
+
+    }
+
+    public async checkMempool() {
+
+        // General mempool check to make sure items in the pool are still valid
+        // This might be overkill since we will do the same check when adding to mempool, so this function may only need to run on first starting after sync is finished.
+
+        const memPool = await Mempool.find();
+
+        memPool.forEach(async (item: any) => {
+
+            // Check if tx confirmed
+            const confirmedTx = await Transaction.findOne({hash: item.hash});
+
+            if (confirmedTx)
+            {
+                logger.warn("Mempool Txid " + item.hash + " is not valid.  Removing from mempool");
+                await Mempool.deleteOne({_id: item._id});
+                return;
+            }
+            else
+            {
+                // Make sure is valid
+
+                if (!item.signature || !item.signingKey)
+                {
+                    logger.warn("Mempool Txid " + item.hash + " is not valid.  Removing from mempool");
+                    await Mempool.deleteOne({_id: item._id});
+                    return;
+                }
+
+                const tx = {
+                    "from": item.from.toUpperCase(), 
+                    "to": item.to.toUpperCase(), 
+                    "fee": item.fee,
+                    "amount": item.amount, 
+                    "timestamp": item.timestamp,
+                    "token": item.token?item.token.toUpperCase():null,
+                    "signature": item.signature.toUpperCase(),
+                    "signingKey": item.signingKey.toUpperCase(),
+                    "type": item.type || 0
+                };
+
+                const txId = PandaniteCore.getTransactionId(tx);
+                if (txId.toUpperCase() !== item.hash.toUpperCase())
+                {
+                    logger.warn("Mempool Txid " + item.hash + " is not valid.  Removing from mempool");
+                    await Mempool.deleteOne({_id: item._id});
+                    return;
+                }
+
+                const isValid = PandaniteCore.verifyTransactionSignature(txId, item.signingKey, item.signature);
+                if (isValid === false)
+                {
+                    logger.warn("Mempool Txid " + item.hash + " is not valid.  Removing from mempool");
+                    await Mempool.deleteOne({_id: item._id});
+                    return;
+                }
+
+                // check account balance is sufficient
+                if (item.token && tx.type === 1)
+                {
+                    const accountBalance = await Balance.findOne({addressString: item.from.toUpperCase(), token: null});
+
+                    if (Big(tx.fee).gt(accountBalance.balance))
+                    {
+                        logger.warn("Mempool Txid " + item.hash + " not enough native balance.  Removing from mempool");
+                        await Mempool.deleteOne({_id: item._id});
+                        return;
+                    }
+
+                    const tokenBalance = await Balance.findOne({addressString: item.from.toUpperCase(), tokenString: item.token.toUpperCase()});
+
+                    if (Big(tx.amount).gt(tokenBalance.balance))
+                    {
+                        logger.warn("Mempool Txid " + item.hash + " not enough token balance.  Removing from mempool");
+                        await Mempool.deleteOne({_id: item._id});
+                        return;
+                    }
+
+                }
+                else if (!item.token && tx.type == 0)
+                {
+                    const accountBalance = await Balance.findOne({addressString: item.from.toUpperCase(), token: null});
+
+                    const totalTxValue = Big(tx.amount).plus(tx.fee).toFixed(0);
+
+                    if (Big(totalTxValue).gt(accountBalance.balance))
+                    {
+                        logger.warn("Mempool Txid " + item.hash + " not enough native balance.  Removing from mempool");
+                        await Mempool.deleteOne({_id: item._id});
+                        return;
+                    }
+
+                }
+
+                // Does this from address have more than 1 mempool item?
+                const addressMempool = await Mempool.countDocuments({from: item.from.toUpperCase()});
+                if (addressMempool > 1)
+                {
+                    let memBalances = {};
+                    // Additional checks to ensure address has enough balance for all mempool items
+                    const accountBalances = await Balance.find({addressString: item.from.toUpperCase()});
+                    for (let i = 0; i < accountBalances.length; i++)
+                    {
+                        const thisBal = accountBalances[i];
+                        const key = thisBal.token?thisBal.tokenString:'native';
+                        memBalances[key] = thisBal.balance;
+                    }
+
+                    const qmempool = await Mempool.aggregate([
+                        {
+                          $match: {from: item.from.toUpperCase()},
+                        },{
+                          $group: {
+                            _id: "$token",
+                            total: {
+                              $sum:  "$amount"
+                            },
+                            totalfee: {
+                              $sum:  "$fee"
+                            }
+                          }
+                        }]
+                    );
+
+                    let memInQueue = {};
+                    for (let i = 0; i < qmempool.length; i++)
+                    {
+                        const thisSummary = qmempool[i];
+                        let key = "native";
+
+                        if (thisSummary._id && thisSummary._id != "")
+                        {
+                            key = thisSummary._id;
+                        }
+
+                        if (!memInQueue[key]) memInQueue[key] = 0;
+                        if (!memInQueue["native"]) memInQueue["native"] = 0;
+
+                        memInQueue[key] = memInQueue[key] + thisSummary.total;
+                        memInQueue["native"] = memInQueue["native"] + thisSummary.totalfee;
+
+                    }
+
+                    let haveError = false;
+                    const keysInQueue = Object.keys(memInQueue);
+                    for (let i = 0; i < keysInQueue.length; i++)
+                    {
+                        const thisKey = keysInQueue[i];
+                        if (!memBalances[thisKey])
+                        {
+                            haveError = true;
+                            break;
+                        }
+
+                        if (Big(memInQueue[thisKey]).gt(memBalances[thisKey]))
+                        {
+                            haveError = true;
+                            break;
+                        }
+
+                    }
+
+                    if (haveError)
+                    {
+                        logger.warn("Mempool From Address " + item.from.toUpperCase() + " has more items in mempool than balance.  Removing most recent from mempool");
+                        const lastItem = await Mempool.find({from: item.from.toUpperCase()}).sort({createdAt: -1}).limit(1);
+                        if (lastItem.length > 0)
+                        {
+                            await Mempool.deleteOne({_id: lastItem[0]._id});
+                        }
+                        return;
+                    }
+
+                }
+
+            }
+
+        });
 
     }
 
@@ -1009,11 +1424,11 @@ logger.warn(e);
 
                     if (fromAddress.address !== "00000000000000000000000000000000000000000000000000" && fromAddress.address !== "")
                     {
-                        await Balance.updateOne({address: thisTx.fromAddress, token: null}, {$inc: {balance: thisTx.amount}});
+                        await Balance.updateOne({address: thisTx.fromAddress, token: thisTx.token}, {$inc: {balance: thisTx.amount}});
                     }
 
                     const numbernegative = thisTx.amount * -1;
-                    await Balance.updateOne({address: thisTx.toAddress, token: null}, {$inc: {balance: numbernegative}});
+                    await Balance.updateOne({address: thisTx.toAddress, token: thisTx.token}, {$inc: {balance: numbernegative}});
 
                     await Transaction.deleteOne({_id: thisTx._id});
 
@@ -1103,7 +1518,19 @@ logger.warn(e);
                 "9B756E997F65772E54804D1373B5C6AEBB35555C61FDB0AA1AA54E47DDF1D2BE",
                 "01703A6C8F63E0808FDA4BD79C773F99BDB724679009E94B6930CE8846817CDD",
                 "ED1730F04A28C218BAB179DF6D577C4893519F070FA1F80B9D9D06A27DB082CE",
-                "A5E0D39CDF60989D9B688A9776B3AE7B279404B21A4024A6353B0A2AC6B34486"
+                "A5E0D39CDF60989D9B688A9776B3AE7B279404B21A4024A6353B0A2AC6B34486",
+                "0E0084700FA9C912E7168572DDC2169944C9CF89DEC87A3DF68EE1945840D753",
+                "98F834ADAAA55A9F859587F205C7A77CB6547899C2178A71CD0B98A41557FCB9",
+                "F87D16EC1AAC2041D859341E4B822B9274F47F203EEE206BF5134FC70027A778",
+                "0EE17D6B2FCCC7BA2C20FEF8B16F49BC62CC89EBCE2C4870B35818AB8D4C1364",
+                "5A2FBD32F6B2E5D92E6DA8148E1FE3AE5F836B6010AA6B3DDAE2C07FCE4C698C",
+                "21456AAE93444303FF0061396665D147D34049FF478DF6FA9F3FF50C0D8C3DA3",
+                "AEE2547337F989433DD2166B2CFBC070128EB2A1A8EC7CFAFC030158ADBD3BF2",
+                "28CBBCE328260875310F3445FC3EC0C162788DFA8C27BFB41BB4C0BE701C8F92",
+                "74A2F60D9FB913EA9719EC218FA8F84483E1D27A913A597E33A9CD9FE093F975",
+                "672B5623CF954519DDCF5FD7DF5652B0D131AD7A3B64E25C13A3CD6BC71CADB9",
+                "D1A9C856D964A05AF7B4E8EFE805E3FCAAE34839C8CE9B7355EE16190128FD8C",
+                "505D6E91621CC2465E0F6BBFC08800A0B4B3A8F080FF98FC8AF38E090AD6AF42"
             ];
 
             // Check Balances
@@ -1117,14 +1544,22 @@ logger.warn(e);
                         // standard transfer
 
                         // get address balance
-                        const balanceInfo = await Balance.findOne({addressString: thisTrx.from, token: null});
+                        const balanceInfo = await Balance.findOne({addressString: thisTrx.from.toUpperCase(), token: null});
 
-                        const totalTxAmount = Big(thisTrx.amount).plus(thisTrx.fee).toFixed();
-
-                        if (Big(totalTxAmount).gt(balanceInfo.balance))
+                        if (!balanceInfo)
                         {
-                            logger.warn("Transaction Amount Exceeds Account Balance " + thisTrx.txid + " Value: " + totalTxAmount + " >  Balance: " + balanceInfo.balance);
+                            logger.warn("Transaction Missing Account Balance " + thisTrx.txid + " Address: " +  thisTrx.from.toUpperCase());
                             isValid = false;
+                        }
+                        else
+                        {
+                            const totalTxAmount = Big(thisTrx.amount).plus(thisTrx.fee).toFixed();
+
+                            if (Big(totalTxAmount).gt(balanceInfo.balance))
+                            {
+                                logger.warn("Transaction Amount Exceeds Account Balance " + thisTrx.txid + " Value: " + totalTxAmount + " >  Balance: " + balanceInfo.balance);
+                                isValid = false;
+                            }
                         }
                     }
                     else if (thisTrx.type === 1)
@@ -1133,15 +1568,27 @@ logger.warn(e);
 
                         if (!thisTrx.token) isValid = false;
 
-                        const tokenInfo = await Token.findOne({tokenId: thisTrx.token});
+                        const tokenInfo = await Token.findOne({tokenId: thisTrx.token.toUpperCase()});
 
                         if (!tokenInfo) isValid = false;
 
                         // get address native balance
-                        const balanceInfo = await Balance.findOne({addressString: thisTrx.from, token: null});
+                        const balanceInfo = await Balance.findOne({addressString: thisTrx.from.toUpperCase(), token: null});
 
+                        if (!balanceInfo)
+                        {
+                            logger.warn("Transaction Missing Account Balance " + thisTrx.txid + " Address: " +  thisTrx.from.toUpperCase());
+                            isValid = false;
+                        }
+                        
                         // get address token balance
-                        const tokenBalanceInfo = await Balance.findOne({addressString: thisTrx.from, token: tokenInfo._id});
+                        const tokenBalanceInfo = await Balance.findOne({addressString: thisTrx.from.toUpperCase(), token: tokenInfo._id});
+
+                        if (!tokenBalanceInfo)
+                        {
+                            logger.warn("Transaction Missing Token Account Balance " + thisTrx.txid + " Address: " +  thisTrx.from.toUpperCase());
+                            isValid = false;
+                        }
 
                         if (!balanceInfo || !tokenBalanceInfo) 
                         {
@@ -1201,14 +1648,14 @@ logger.warn(e);
             // add block to db
 
             const newBlock = {
-                nonce: block.nonce,
+                nonce: block.nonce.toUpperCase(),
                 height: block.id,
                 totalWork: totalWork,
                 difficulty: block.difficulty,
                 timestamp: block.timestamp,
-                merkleRoot: block.merkleRoot,
-                blockHash: block.hash,
-                lastBlockHash: block.lastBlockHash,
+                merkleRoot: block.merkleRoot.toUpperCase(),
+                blockHash: block.hash.toUpperCase(),
+                lastBlockHash: block.lastBlockHash.toUpperCase(),
                 transactions: [],
                 createdAt: Date.now(),
                 updatedAt: Date.now()
@@ -1223,20 +1670,24 @@ logger.warn(e);
 
                 const thisTx = block.transactions[i];
 
-                const tokenInfo = await Token.findOne({transaction: thisTx.token});
+                let tokenInfo = null;
+                if (thisTx.token)
+                {
+                    tokenInfo = await Token.findOne({transaction: thisTx.token.toUpperCase()});
+                }
                 let tokenId = null;
                 if (tokenInfo)
                 {
                     tokenId = tokenInfo._id;
                 }
 
-                let toAddress = await Address.findOne({address: thisTx.to});
-                let fromAddress = await Address.findOne({address: thisTx.from});
+                let toAddress = await Address.findOne({address: thisTx.to.toUpperCase()});
+                let fromAddress = await Address.findOne({address: thisTx.from.toUpperCase()});
 
                 if (!toAddress)
                 {
                     toAddress = await Address.create({
-                        address: thisTx.to,
+                        address: thisTx.to.toUpperCase(),
                         publicKey: "",
                         createdAt: Date.now(),
                         updatedAt: Date.now()
@@ -1246,11 +1697,15 @@ logger.warn(e);
                 if (!fromAddress)
                 {
                     fromAddress = await Address.create({
-                        address: thisTx.from,
-                        publicKey: "",
+                        address: thisTx.from.toUpperCase(),
+                        publicKey: thisTx.signingKey?thisTx.signingKey.toUpperCase():"",
                         createdAt: Date.now(),
                         updatedAt: Date.now()
                     });
+                }
+                else if ((!fromAddress.publicKey || fromAddress.publicKey == "") && thisTx.signingKey)
+                {
+                    await Address.updateOne({_id: fromAddress._id}, {$set: {publicKey: thisTx.signingKey.toUpperCase()}});
                 }
 
                 const transactionAmount = thisTx.token?thisTx.tokenAmount:thisTx.amount;
@@ -1259,14 +1714,14 @@ logger.warn(e);
                     type: thisTx.type || 0,
                     toAddress: toAddress._id,
                     fromAddress: fromAddress._id,
-                    signature: thisTx.signature,
-                    hash: thisTx.txid,
+                    signature: thisTx.signature?thisTx.signature.toUpperCase():null,
+                    hash: thisTx.txid.toUpperCase(),
                     amount: transactionAmount,
                     token: tokenId,
                     fee: thisTx.fee,
                     isGenerate: thisTx.from===""?true:false,
                     nonce: thisTx.timestamp,
-                    signingKey: thisTx.signingKey,
+                    signingKey: thisTx.signingKey?thisTx.signingKey.toUpperCase():null,
                     block: blockInfo._id,
                     blockIndex: i,
                     createdAt: Date.now(),
@@ -1291,8 +1746,8 @@ logger.warn(e);
                     await Balance.create({
                         address: toAddress._id,
                         token: tokenId,
-                        addressString: thisTx.to,
-                        tokenString: thisTx.token,
+                        addressString: thisTx.to.toUpperCase(),
+                        tokenString: thisTx.token?.toUpperCase(),
                         balance: thisTx.amount,
                         createdAt: Date.now(),
                         updatedAt: Date.now()
@@ -1365,7 +1820,17 @@ logger.warn(e);
         const first = await Block.findOne({height: firstID});
         const last = await Block.findOne({height: lastID});
 
-        if (!first || !last) return;
+        if (!first)
+        {
+            logger.info("Could not find first block: " + firstID);
+            return;
+        }
+
+        if (!last)
+        {
+            logger.info("Could not find last block: " + lastID);
+            return;
+        }
 
         const elapsed: number = last.timestamp - first.timestamp;
         const numBlocksElapsed: number = lastID - firstID;
@@ -1385,4 +1850,5 @@ logger.warn(e);
         return true;
 
     }
+
 }

@@ -7,4 +7,6 @@ export class Constants {
     static readonly MIN_DIFFICULTY = 6;
     static readonly MAX_DIFFICULTY = 255;
     static readonly TRANSACTIONINFO_BUFFER_SIZE = 149;
+    static readonly NATIVE_ASSET_TICKER = "PDN";
+    static readonly NATIVE_ASSET_NAME = "Pandanite";
 }

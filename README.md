@@ -42,6 +42,8 @@ npm run prod
 
 ```
 --reset :: reset chain
+--rollback 10 :: rollback chain 10 blocks
+--revalidate :: revalidate blockchain database from genesis & rebuild all balances
 --port 3000 :: set port to 3000
 --name test :: set node name to test
 --network mainnet :: set node network to mainnet

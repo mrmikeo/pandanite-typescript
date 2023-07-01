@@ -131,6 +131,26 @@ class MerkleTree {
 
 export class PandaniteCore{
 
+    static getCurrentMiningFee(blockId: number) {
+
+        if (blockId == 0) return 0;
+        
+        // NOTE:
+        // The chain was forked three times, once at 7,750 and again at 125,180, then at 18k
+        // Thus we push the chain ahead by this count.
+        // SEE: https://bitcointalk.org/index.php?topic=5372707.msg58965610#msg58965610
+        let logicalBlock: number = blockId + 125180 + 7750 + 18000;
+        let amount: number = 50.0;
+
+        while (logicalBlock >= 666666) {
+            amount *= 2.0 / 3.0;
+            logicalBlock -= 666666;
+        }
+
+        return amount;
+
+    }
+
     static async checkBlockValid(block: any, lastBlockHash: string, lastBlockHeight: number, expectedDifficulty: number, networkTimestamp: number, medianTimestamp: number): Promise<boolean> {
 
         return new Promise<boolean>((resolve, reject) => {
@@ -193,7 +213,7 @@ export class PandaniteCore{
             }
 
             // Validate Blockhash
-            const expectedBlockHash = block.hash;
+            const expectedBlockHash = block.hash.toUpperCase();
             const actualBlockHash = PandaniteCore.getBlockHash(block).toUpperCase();
 
             if (expectedBlockHash !== actualBlockHash) {
@@ -442,11 +462,6 @@ export class PandaniteCore{
       
           return newDifficulty;
         }
-    }
-
-    static createWallet() {
-
-
     }
 
     static walletAddressFromPublicKey(publicKey: string) {

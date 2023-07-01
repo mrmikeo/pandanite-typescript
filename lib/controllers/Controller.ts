@@ -3,7 +3,7 @@ import { transactionSchema, addressSchema, balanceSchema, tokenSchema, blockSche
 import { PandaniteCore } from '../core/Core'
 import { Request, Response } from 'express';
 import Big from 'big.js';
-import { find } from 'underscore';
+import { Constants} from "../core/Constants"
 
 const Transaction = mongoose.model('Transaction', transactionSchema);
 const Address = mongoose.model('Address', addressSchema);
@@ -132,20 +132,37 @@ export class ApiController{
             for (let i = 0; i < memPool.length; i++)
             {
                 const thistx = memPool[i];
-                stats.mempool.push({
+
+                let tx = {
                     type: thistx.type,
-                    token: thistx.token,
-                    tokenAmount: thistx.token?thistx.amount:null,
-                    amount: thistx.token?0:thistx.amount,
+                    amount: thistx.amount,
                     fee: thistx.fee,
                     from: thistx.from,
                     to: thistx.to,
-                    signature: thistx.signature,
-                    signingKey: thistx.signingKey,
                     timestamp: thistx.nonce,
                     nonce: thistx.nonce,
                     txid:  thistx.hash
-                });
+                };
+
+                if (thistx.signature)
+                {
+                    tx["signature"] = thistx.signature;
+                }
+
+                if (thistx.signingKey)
+                {
+                    tx["signingKey"] = thistx.signingKey;
+                }
+
+                if (thistx.token)
+                {
+                    tx["token"] = thistx.token;
+                    tx["tokenAmount"] = thistx.amount;
+                    tx["amount"] = 0;
+                }
+
+                stats.mempool.push(tx);
+
             }
 
             res.json(stats);
@@ -202,20 +219,37 @@ export class ApiController{
             for (let i = 0; i < memPool.length; i++)
             {
                 const thistx = memPool[i];
-                response.mempool.push({
+                
+                let tx = {
                     type: thistx.type,
-                    token: thistx.token,
-                    tokenAmount: thistx.token?thistx.amount:null,
-                    amount: thistx.token?0:thistx.amount,
+                    amount: thistx.amount,
                     fee: thistx.fee,
                     from: thistx.from,
                     to: thistx.to,
-                    signature: thistx.signature,
-                    signingKey: thistx.signingKey,
                     timestamp: thistx.nonce,
                     nonce: thistx.nonce,
                     txid:  thistx.hash
-                });
+                };
+
+                if (thistx.signature)
+                {
+                    tx["signature"] = thistx.signature;
+                }
+
+                if (thistx.signingKey)
+                {
+                    tx["signingKey"] = thistx.signingKey;
+                }
+
+                if (thistx.token)
+                {
+                    tx["token"] = thistx.token;
+                    tx["tokenAmount"] = thistx.amount;
+                    tx["amount"] = 0;
+                }
+
+                response.mempool.push(tx);
+
             }
 
             return response;
@@ -266,20 +300,36 @@ export class ApiController{
                 {
                     let thistx = transactions[i];
 
-                    blockinfo.transactions.push({
+                    let tx = {
                         type: thistx.type,
-                        token: thistx.token?.transaction,
-                        tokenAmount: thistx.token?thistx.amount:null,
-                        amount: thistx.token?0:thistx.amount,
+                        amount: thistx.amount,
                         fee: thistx.fee,
                         from: thistx.fromAddress.address,
                         to: thistx.toAddress.address,
-                        signature: thistx.signature,
-                        signingKey: thistx.signingKey,
                         timestamp: thistx.nonce,
                         nonce: thistx.nonce,
                         txid:  thistx.hash
-                    });
+                    }
+
+                    if (thistx.signature)
+                    {
+                        tx["signature"] = thistx.signature;
+                    }
+    
+                    if (thistx.signingKey)
+                    {
+                        tx["signingKey"] = thistx.signingKey;
+                    }
+    
+                    if (thistx.token)
+                    {
+                        tx["token"] = thistx.token.transaction;
+                        tx["tokenAmount"] = thistx.amount;
+                        tx["amount"] = 0;
+                    }
+
+                    blockinfo.transactions.push(tx);
+
                 }
 
                 res.json(blockinfo);
@@ -329,20 +379,36 @@ export class ApiController{
                 {
                     let thistx = transactions[i];
 
-                    blockinfo.transactions.push({
+                    let tx = {
                         type: thistx.type,
-                        token: thistx.token?.transaction,
-                        tokenAmount: thistx.token?thistx.amount:null,
-                        amount: thistx.token?0:thistx.amount,
+                        amount: thistx.amount,
                         fee: thistx.fee,
                         from: thistx.fromAddress.address,
                         to: thistx.toAddress.address,
-                        signature: thistx.signature,
-                        signingKey: thistx.signingKey,
                         timestamp: thistx.nonce,
                         nonce: thistx.nonce,
                         txid:  thistx.hash
-                    });
+                    }
+
+                    if (thistx.signature)
+                    {
+                        tx["signature"] = thistx.signature;
+                    }
+    
+                    if (thistx.signingKey)
+                    {
+                        tx["signingKey"] = thistx.signingKey;
+                    }
+    
+                    if (thistx.token)
+                    {
+                        tx["token"] = thistx.token.transaction;
+                        tx["tokenAmount"] = thistx.amount;
+                        tx["amount"] = 0;
+                    }
+
+                    blockinfo.transactions.push(tx);
+
                 }
 
                 return blockinfo;
@@ -379,20 +445,36 @@ export class ApiController{
             {
                 const thistx = memPool[i];
 
-                response.push({
+                let tx = {
                     type: thistx.type,
-                    token: thistx.token,
-                    tokenAmount: thistx.token?thistx.amount:null,
-                    amount: thistx.token?0:thistx.amount,
+                    amount: thistx.amount,
                     fee: thistx.fee,
                     from: thistx.from,
                     to: thistx.to,
-                    signature: thistx.signature,
-                    signingKey: thistx.signingKey,
                     timestamp: thistx.nonce,
                     nonce: thistx.nonce,
                     txid:  thistx.hash
-                });
+                };
+
+                if (thistx.signature)
+                {
+                    tx["signature"] = thistx.signature;
+                }
+
+                if (thistx.signingKey)
+                {
+                    tx["signingKey"] = thistx.signingKey;
+                }
+
+                if (thistx.token)
+                {
+                    tx["token"] = thistx.token;
+                    tx["tokenAmount"] = thistx.amount;
+                    tx["amount"] = 0;
+                }
+
+                response.push(tx);
+
             }
 
             res.json(response);
@@ -485,19 +567,226 @@ export class ApiController{
 
     }
 
-    public getWalletTransactions (req: Request, res: Response) { 
+    public async getWalletTransactions (req: Request, res: Response) { 
+
+        try {
+
+            if (!req.query.wallet)
+            {
+                res.json({error: "No query parameters specified"});
+                return;
+            }
+
+            const walletAddress = String(req.query.wallet).toUpperCase();
+
+            const addressInfo = await Address.findOne({address: walletAddress});
+
+            if (!addressInfo)
+            {
+                res.json([]);
+                return;
+            }
+
+            const txList = await Transaction.find({$or: [{toAddress: addressInfo._id}, {fromAddress: addressInfo._id}]}).populate("block").sort({createdAt: -1});
+
+            let response = [];
+
+            for (let i = 0; i < txList.length; i++)
+            {
+                const txInfo = txList[i];
+
+                let tx = {
+                    type: txInfo.type,
+                    amount: txInfo.amount,
+                    fee: txInfo.fee,
+                    from: txInfo.fromAddress.address,
+                    to: txInfo.toAddress.address,
+                    timestamp: txInfo.nonce,
+                    nonce: txInfo.nonce,
+                    txid:  txInfo.hash,
+                    blockHeight: txInfo.block.height,
+                    blockIndex: txInfo.blockIndex,
+                    isGenerate: txInfo.isGenerate
+                };
+
+                if (txInfo.signature)
+                {
+                    tx["signature"] = txInfo.signature;
+                }
+
+                if (txInfo.signingKey)
+                {
+                    tx["signingKey"] = txInfo.signingKey;
+                }
+
+                if (txInfo.token)
+                {
+                    tx["token"] = txInfo.token?.transaction;
+                    tx["tokenAmount"] = txInfo.amount;
+                    tx["amount"] = 0;
+                }
+
+                response.push(tx);
+
+            }
+
+            res.json(response);
+
+        } catch (e) {
+
+            res.json([]);
+
+        }
 
     }
 
-    public getMine (req: Request, res: Response) { 
+    public async getMine (req: Request, res: Response) { 
+
+        const result = {};
+
+        try {
+
+            const lastBlock = await Block.find().sort({height: -1}).limit(1); 
+
+            const chainHeight = lastBlock[0]?.height || 0;
+
+            const lastDiffHeight = Math.floor(chainHeight/Constants.DIFFICULTY_LOOKBACK)*Constants.DIFFICULTY_LOOKBACK;
+
+
+            if (lastDiffHeight <= Constants.DIFFICULTY_LOOKBACK * 2) return;
+            if (lastDiffHeight % Constants.DIFFICULTY_LOOKBACK !== 0) return;
+
+            const firstID: number = lastDiffHeight - Constants.DIFFICULTY_LOOKBACK;
+            const lastID: number = lastDiffHeight;
+            const first = await Block.findOne({height: firstID});
+            const last = await Block.findOne({height: lastID});
+
+            let thisdifficulty: number;
+
+            if (!first)
+            {
+                thisdifficulty = 16; // default
+            }
+            else if (!last)
+            {
+                thisdifficulty = 16; // default
+            }
+            else
+            {
+                const elapsed: number = last.timestamp - first.timestamp;
+                const numBlocksElapsed: number = lastID - firstID;
+                const target: number = numBlocksElapsed * Constants.DESIRED_BLOCK_TIME_SEC;
+                const difficulty: number = last.difficulty;
+                thisdifficulty = PandaniteCore.computeDifficulty(difficulty, elapsed, target);
+            
+                if (
+                    lastDiffHeight >= Constants.PUFFERFISH_START_BLOCK &&
+                    lastDiffHeight < Constants.PUFFERFISH_START_BLOCK + Constants.DIFFICULTY_LOOKBACK * 2
+                ) {
+                    thisdifficulty = Constants.MIN_DIFFICULTY;
+                }
+            }
+
+            result["lastHash"] = lastBlock[0]?.blockHash;
+            result["challengeSize"] = thisdifficulty;
+            result["chainLength"] = chainHeight;
+            result["miningFee"] = PandaniteCore.getCurrentMiningFee(chainHeight);
+            result["lastTimestamp"] = lastBlock[0]?.timestamp;
+
+        } catch (e) {
+
+            console.log(e);
+
+            result["error"] = "An error occurred";
+
+        }
+        
+        res.json(result);
 
     }
 
-    public getSupply (req: Request, res: Response) { 
+    public async getSupply (req: Request, res: Response) { 
+
+        try {
+
+            const qtotalcoins = await Balance.aggregate([
+                {
+                $match: {token: null},
+                },{
+                $group: {
+                    _id: null,
+                    total: {
+                    $sum:  "$balance"
+                    }
+                }
+                }]
+            );
+
+            let totalcoins = Big(0).toFixed();
+
+            if (qtotalcoins[0] && qtotalcoins[0].total)
+                totalcoins = Big(qtotalcoins[0].total).div(10**4).toFixed(4);
+
+            res.json(Number(totalcoins));
+
+        } catch (e) {
+
+            res.json(0);
+
+        }
 
     }
 
-    public getNetworkHashRate (req: Request, res: Response) { 
+    public async getNetworkHashRate (req: Request, res: Response) { 
+
+        try {
+
+            const lastBlock = await Block.find().sort({height: -1}).limit(1); 
+
+            const blockCount = lastBlock[0]?.height || 0;
+
+            let totalWork: number = 0;
+        
+            const blockStart: number = blockCount < 52 ? 2 : blockCount - 50;
+            const blockEnd: number = blockCount;
+        
+            let start: number = 0;
+            let end: number = 0;
+
+            const blockStats = await Block.aggregate([
+                {
+                $match: {height: {$gte: blockStart, $lte: blockEnd}},
+                },{
+                $sort : { height : 1 }
+                },{
+                $group: {
+                    _id: null,
+                    total: {
+                    $sum:  {$pow : [2, "$difficulty"]}
+                    },
+                    first: {
+                        $first: "$timestamp"
+                    },
+                    last: {
+                        $last: "$timestamp"
+                    }
+                }
+                }]
+            );
+
+            totalWork = blockStats[0].total;
+            start = blockStats[0].first;
+            end = blockStats[0].last;
+
+            const hashRate = totalWork / (end - start);
+
+            res.json(hashRate);
+
+        } catch (e) {
+
+            res.json(0);
+
+        }
 
     }
 
@@ -560,12 +849,10 @@ console.log(peerInfo);
 
     }
 
-    // returns octet stream
-    public getTx (req: Request, res: Response) { 
-
-    }
-
     public getSync (req: Request, res: Response) { 
+
+        console.log("getSync REST endpoint called")
+        //console.log(req.body);
 
     }
 
@@ -573,7 +860,11 @@ console.log(peerInfo);
 
     }
 
+    // same endpoints /gettx /synctx   -- returns octet stream of mempool tx data
     public getSyncTx (req: Request, res: Response) { 
+
+        console.log("getSyncTx REST endpoint called")
+        //console.log(req.body);
 
     }
 
@@ -595,7 +886,7 @@ console.log(peerInfo);
 
     }
 
-    // json body
+    // json body - post
     public createTransaction (req: Request, res: Response) { 
 
 
@@ -697,11 +988,9 @@ console.log(peerInfo);
         if (txInfo)
         {
 
-            const response = {
+            let response = {
                 type: txInfo.type,
-                token: txInfo.token?.transaction,
-                tokenAmount: txInfo.token?txInfo.amount:null,
-                amount: txInfo.token?0:txInfo.amount,
+                amount: txInfo.amount,
                 fee: txInfo.fee,
                 from: txInfo.fromAddress.address,
                 to: txInfo.toAddress.address,
@@ -715,6 +1004,23 @@ console.log(peerInfo);
                 confirmations: lastBlockHeight - txInfo.block.height,
                 isGenerate: txInfo.isGenerate
             };
+
+            if (txInfo.signature)
+            {
+                response["signature"] = txInfo.signature;
+            }
+
+            if (txInfo.signingKey)
+            {
+                response["signingKey"] = txInfo.signingKey;
+            }
+
+            if (txInfo.token)
+            {
+                response["token"] = txInfo.token.transaction;
+                response["tokenAmount"] = txInfo.amount;
+                response["amount"] = 0;
+            }
 
             return response;
 
