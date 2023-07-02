@@ -1585,6 +1585,7 @@ logger.warn(e);
             let pendingAmounts = {};
 
             // Check Balances
+            if (block.id > 500000)
             for (let i = 0; i < block.transactions.length; i++)
             {
                 const thisTrx = block.transactions[i];
