@@ -291,7 +291,7 @@ export class PandaniteJobs{
                             messageId: messageId
                         };
 
-                        this.wsRespFunc[messageId] = (peer: string, messageId: string, data: string) => {
+                        that.wsRespFunc[messageId] = (peer: string, messageId: string, data: string) => {
 
                             try {
 
@@ -324,8 +324,12 @@ export class PandaniteJobs{
 
                         };
 
-                        this.websocketPeers[thisPeer].send(JSON.stringify(message));
-
+                        try {
+                            that.websocketPeers[thisPeer].send(JSON.stringify(message));
+                        } catch (e) {
+                            delete that.wsRespFunc[messageId];
+                            delete that.websocketPeers[thisPeer];
+                        }
                     }
                     else
                     {
@@ -1076,6 +1080,7 @@ logger.warn(e);
                                     this.send(JSON.stringify(message));
                                 } catch (e) {
                                     delete that.wsRespFunc[messageId];
+                                    delete that.websocketPeers[peer]
                                 }
 
                             }
@@ -1564,6 +1569,10 @@ logger.warn(e);
                 "A1E32D847C668C4F71574875ED085085DDBB04629001B4ACDD43417EB1E6F564"
             ];
 
+            const excludedBlocks = [
+                236512
+            ];
+
             let pendingAmounts = {};
 
             // Check Balances
@@ -1577,7 +1586,7 @@ logger.warn(e);
 
                 pendingAmounts[pendingKey] = thisTrx.amount;
 
-                if (!excludedTransactions.includes(thisTrx.txid.toUpperCase()) && thisTrx.from && thisTrx.from != "00000000000000000000000000000000000000000000000000")
+                if (!excludedBlocks.includes(block.id) && !excludedTransactions.includes(thisTrx.txid.toUpperCase()) && thisTrx.from && thisTrx.from != "00000000000000000000000000000000000000000000000000")
                 {
                     if (!thisTrx.type || thisTrx.type === 0)
                     {
@@ -1770,6 +1779,7 @@ logger.warn(e);
                 {
                     tokenInfo = await Token.findOne({transaction: thisTx.token.toUpperCase()});
                 }
+
                 let tokenId = null;
                 if (tokenInfo)
                 {
@@ -1803,7 +1813,7 @@ logger.warn(e);
                     await Address.updateOne({_id: fromAddress._id}, {$set: {publicKey: thisTx.signingKey.toUpperCase()}});
                 }
 
-                const transactionAmount = thisTx.token?thisTx.tokenAmount:thisTx.amount;
+                const transactionAmount: number = thisTx.token?thisTx.tokenAmount:thisTx.amount;
 
                 const newTransaction = {
                     type: thisTx.type || 0,

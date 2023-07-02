@@ -549,15 +549,18 @@ export class ApiController{
             if (req.query.wallet && req.query.token)
             {
                 const balance = await Balance.findOne({addressString: req.query.wallet.toString(), tokenString: req.query.token.toString()});
-                ledgerBalance = balance.balance;
+                ledgerBalance = balance?.balance || 0;
+                let tokenString = balance?.tokenString || "";
+
+                res.json({balance: ledgerBalance, token: tokenString, type: 'token'});
             }
             else if (req.query.wallet)
             {
                 const balance = await Balance.findOne({addressString: req.query.wallet.toString(), token: null});
-                ledgerBalance = balance.balance;
-            }
+                ledgerBalance = balance?.balance || 0;
 
-            res.json({balance: ledgerBalance});
+                res.json({balance: ledgerBalance, type: 'native'});
+            }
 
         } catch (e) {
 
@@ -847,6 +850,9 @@ console.log(peerInfo);
 
     public submitBlock (req: Request, res: Response) { 
 
+
+
+
     }
 
     public getSync (req: Request, res: Response) { 
@@ -856,7 +862,11 @@ console.log(peerInfo);
 
     }
 
+    // octect stream
     public getBlockHeaders (req: Request, res: Response) { 
+
+        console.log("getBlockHeaders REST endpoint called")
+        //console.log(req.body);
 
     }
 
@@ -888,6 +898,8 @@ console.log(peerInfo);
 
     // json body - post
     public createTransaction (req: Request, res: Response) { 
+
+
 
 
 
