@@ -1586,7 +1586,7 @@ logger.warn(e);
 
                 pendingAmounts[pendingKey] = thisTrx.amount;
 
-                if (!excludedBlocks.includes(block.id) && !excludedTransactions.includes(thisTrx.txid.toUpperCase()) && thisTrx.from && thisTrx.from != "00000000000000000000000000000000000000000000000000")
+                if (!excludedBlocks.includes(Number(block.id)) && !excludedTransactions.includes(thisTrx.txid.toUpperCase()) && thisTrx.from && thisTrx.from != "00000000000000000000000000000000000000000000000000")
                 {
                     if (!thisTrx.type || thisTrx.type === 0)
                     {
