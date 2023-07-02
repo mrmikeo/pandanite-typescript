@@ -1566,11 +1566,8 @@ logger.warn(e);
                 "672B5623CF954519DDCF5FD7DF5652B0D131AD7A3B64E25C13A3CD6BC71CADB9",
                 "D1A9C856D964A05AF7B4E8EFE805E3FCAAE34839C8CE9B7355EE16190128FD8C",
                 "505D6E91621CC2465E0F6BBFC08800A0B4B3A8F080FF98FC8AF38E090AD6AF42",
-                "A1E32D847C668C4F71574875ED085085DDBB04629001B4ACDD43417EB1E6F564"
-            ];
-
-            const excludedBlocks = [
-                236512
+                "A1E32D847C668C4F71574875ED085085DDBB04629001B4ACDD43417EB1E6F564",
+                "7012A985AA3BF07B41EFE0417D16BEDAF4D3695C2BECEE432B09FD7AF1B65E8F"
             ];
 
             let pendingAmounts = {};
@@ -1586,7 +1583,7 @@ logger.warn(e);
 
                 pendingAmounts[pendingKey] = thisTrx.amount;
 
-                if (!excludedBlocks.includes(Number(block.id)) && !excludedTransactions.includes(thisTrx.txid.toUpperCase()) && thisTrx.from && thisTrx.from != "00000000000000000000000000000000000000000000000000")
+                if (!excludedTransactions.includes(thisTrx.txid.toUpperCase()) && thisTrx.from && thisTrx.from != "00000000000000000000000000000000000000000000000000")
                 {
                     if (!thisTrx.type || thisTrx.type === 0)
                     {
