@@ -134,7 +134,7 @@ export class PandaniteCore{
     static getCurrentMiningFee(blockId: number) {
 
         if (blockId == 0) return 0;
-        
+
         // NOTE:
         // The chain was forked three times, once at 7,750 and again at 125,180, then at 18k
         // Thus we push the chain ahead by this count.
@@ -147,11 +147,11 @@ export class PandaniteCore{
             logicalBlock -= 666666;
         }
 
-        return amount;
+        return Math.floor(amount * Constants.DECIMAL_SCALE_FACTOR);
 
     }
 
-    static async checkBlockValid(block: any, lastBlockHash: string, lastBlockHeight: number, expectedDifficulty: number, networkTimestamp: number, medianTimestamp: number): Promise<boolean> {
+    static async checkBlockValid(block: any, lastBlockHash: string, lastBlockHeight: number, expectedDifficulty: number, networkTimestamp: number, medianTimestamp: number, blockReward: number): Promise<boolean> {
 
         return new Promise<boolean>((resolve, reject) => {
 
@@ -159,6 +159,16 @@ export class PandaniteCore{
             if (block.id != lastBlockHeight + 1)
             {
                 reject("Invalid Block Height: " + block.id);
+            }
+
+            // Check block reward
+            if (block.id > 1)
+            {
+                const expectedReward = PandaniteCore.getCurrentMiningFee(block.id);
+                if (expectedReward !==  blockReward)
+                {
+                    reject("Invalid Block Reward: " + blockReward + ", Expected: " + expectedReward);
+                }
             }
 
             // Check transactions size

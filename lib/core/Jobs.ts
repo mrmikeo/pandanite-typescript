@@ -35,6 +35,9 @@ const Mempool = mongoose.model('Mempool', mempoolSchema);
 
 axios.defaults.timeout === 3000;
 
+/***
+ * This queue is for downloading the blockchain, but can be used for any purpose that requires a queue with one or more workers
+ */
 class AsyncQueue<T> {
     private queue: T[];
     private enqueuePromise: Promise<void> | null;
@@ -201,7 +204,7 @@ export class PandaniteJobs{
         this.myIpAddress = "127.0.0.1";
     }
 
-    public async syncPeers()  {
+    public async startBlockchain()  {
 
         const argv = minimist(process.argv.slice(1));
 
@@ -255,6 +258,7 @@ export class PandaniteJobs{
         // clear mempool
         await Mempool.deleteMany();
 
+        // get external ip address
         try {
             const response = await axios.get('http://api.ipify.org/')
             logger.info("My public IP address is: " + response.data);
@@ -375,13 +379,12 @@ export class PandaniteJobs{
 
         };
 
-        // Start the queue processor for downloading blocks
+        // Add worker function to the processing queue
         this.queueProcessor.addFunction(workerFunction);
-
-        logger.info("My block height is " + height);
 
         const lastDiffHeight = Math.floor(height/Constants.DIFFICULTY_LOOKBACK)*Constants.DIFFICULTY_LOOKBACK;
 
+        logger.info("My block height is " + height);
         logger.info("Last diff height is " + lastDiffHeight);
 
         await this.updateDifficultyForHeight(lastDiffHeight);
@@ -476,6 +479,7 @@ export class PandaniteJobs{
                     tx["signingKey"] = thistx.signingKey;
                 }
 
+                // v2 options
                 if (thistx.token)
                 {
                     tx["token"] = thistx.token.transaction;
@@ -485,6 +489,7 @@ export class PandaniteJobs{
 
                 blockinfo.transactions.push(tx);
 
+                // check to make sure address record exists - if not create
                 let toAddress = await Address.findOne({address: tx.to.toUpperCase()});
                 let fromAddress = await Address.findOne({address: tx.from.toUpperCase()});
 
@@ -537,7 +542,7 @@ export class PandaniteJobs{
             let networkTimestamp = Math.round(Date.now()/1000);
 
             try {
-                isValid = await PandaniteCore.checkBlockValid(block, lastBlockHash, lastBlockHeight, this.difficulty, networkTimestamp, medianTimestamp);
+                isValid = await PandaniteCore.checkBlockValid(block, lastBlockHash, lastBlockHeight, this.difficulty, networkTimestamp, medianTimestamp, block.blockReward);
             } catch (e) {
                 logger.warn(e);
                 isValid = false;
@@ -545,7 +550,7 @@ export class PandaniteJobs{
 
             let expectedHeight = lastBlockHeight + 1;
             
-            if (block.id != expectedHeight)
+            if (block.height != expectedHeight)
             {
                 isValid = false;
             }
@@ -608,7 +613,7 @@ export class PandaniteJobs{
             else
             {
 
-                // Stop here and clear anything remaining for regular sync
+                // Stop here and clear anything remaining for resume via regular sync
 
                 const toDeleteBlocks = await Block.find({height: {$gt: lastBlockHeight}});
                 for (let i = 0; i < toDeleteBlocks.length; i++)
@@ -620,6 +625,7 @@ export class PandaniteJobs{
 
                 }
 
+                break;
 
             }
 
@@ -867,7 +873,7 @@ export class PandaniteJobs{
                 if (this.peerVersions[peer] === 2) // PEER VERSION 2
                 {
 
-                    // Known peer of version 2
+                    // Check if already connected to v2 peer
                     if (this.websocketPeers[peer])
                     {
                         // check if websocket is still open
@@ -962,7 +968,9 @@ logger.warn(e);
                             try {
                                 this.websocketPeers[peer].send(JSON.stringify(message));
                             } catch (e) {
+                                // could not send message
                                 delete that.wsRespFunc[messageId];
+                                delete this.websocketPeers[peer]
                             }
                             
                         }
@@ -1124,7 +1132,7 @@ logger.warn(e);
                     }
 
                 }
-                else // PEER VERSION 1
+                else // PEER VERSION 1 or Unknown version
                 {
 
                     try {
@@ -1156,7 +1164,7 @@ logger.warn(e);
 
                         const havePeer = await Peer.countDocuments({url: peer});
         
-                        if (havePeer == 0)
+                        if (havePeer === 0)
                         {
 
                             let stripPeer = peer.replace('http://', '');
@@ -1177,6 +1185,8 @@ logger.warn(e);
                         }
                         else if (havePeer > 1)
                         {
+                            // too many records for same peer.  flush all and recreate
+
                             await Peer.deleteMany({url: peer});
 
                             let stripPeer = peer.replace('http://', '');
@@ -1206,14 +1216,14 @@ logger.warn(e);
 
                     } catch (e) {
 
-                        // peer timeout or some other issue
+                        // peer timeout or some other issue - set inactive until another peer tells us it's active again
 
                         const index = this.activePeers.indexOf(peer);
                         if (index > -1) {
                             this.activePeers.splice(index, 1)
                         }
 
-                        await Peer.updateOne({url: peer}, {$set: {isActive: false}});
+                        await Peer.updateOne({url: peer}, {$set: {isActive: false, updatedAt: Date.now()}});
                         
                     }
 
@@ -1262,7 +1272,7 @@ logger.warn(e);
 
                             let havePeer = await Peer.countDocuments({url: thisPeer});
 
-                            if (havePeer == 0)
+                            if (havePeer === 0)
                             {
 
                                 const peerresponse = await axios({
@@ -1290,6 +1300,18 @@ logger.warn(e);
 
                                 }
         
+                            }
+                            else if (havePeer === 1)
+                            {
+
+                                await Peer.updateOne({url: peer}, {$set: {isActive: true, updatedAt: Date.now()}})
+
+                            }
+                            else if (havePeer > 1)
+                            {
+                                // too many records for same peer - reset 
+                                await Peer.deleteMany({url: peer});
+
                             }
 
                         }
@@ -1473,6 +1495,7 @@ logger.warn(e);
 
         let lastHeight = 0;
         let isValid = false;
+        let blockReward = 0;
 
         if (lastBlock)
         {
@@ -1506,8 +1529,15 @@ logger.warn(e);
 
             let networkTimestamp = Math.round(Date.now()/1000);
 
+            // fix for transactions ordering, as generate transaction should always be first when doing the balance checks
+            block.transactions.sort((a, b) => {
+                return a.from < b.from ? -1 : 1;
+            });
+
+            blockReward = block.transactions[0].amount;
+
             try {
-                isValid = await PandaniteCore.checkBlockValid(block, lastBlock.blockHash, lastBlock.height, this.difficulty, networkTimestamp, medianTimestamp);
+                isValid = await PandaniteCore.checkBlockValid(block, lastBlock.blockHash, lastBlock.height, this.difficulty, networkTimestamp, medianTimestamp, blockReward);
             } catch (e) {
                 logger.warn(e);
                 throw new Error(e);
@@ -1530,13 +1560,23 @@ logger.warn(e);
                 "74A2F60D9FB913EA9719EC218FA8F84483E1D27A913A597E33A9CD9FE093F975",
                 "672B5623CF954519DDCF5FD7DF5652B0D131AD7A3B64E25C13A3CD6BC71CADB9",
                 "D1A9C856D964A05AF7B4E8EFE805E3FCAAE34839C8CE9B7355EE16190128FD8C",
-                "505D6E91621CC2465E0F6BBFC08800A0B4B3A8F080FF98FC8AF38E090AD6AF42"
+                "505D6E91621CC2465E0F6BBFC08800A0B4B3A8F080FF98FC8AF38E090AD6AF42",
+                "A1E32D847C668C4F71574875ED085085DDBB04629001B4ACDD43417EB1E6F564"
             ];
+
+            let pendingAmounts = {};
 
             // Check Balances
             for (let i = 0; i < block.transactions.length; i++)
             {
                 const thisTrx = block.transactions[i];
+
+                let tokenKey = thisTrx.token?thisTrx.token.toUpperCase():'native';
+
+                let pendingKey = `${thisTrx.to.toUpperCase()}:${tokenKey}`;
+
+                pendingAmounts[pendingKey] = thisTrx.amount;
+
                 if (!excludedTransactions.includes(thisTrx.txid) && thisTrx.from && thisTrx.from != "00000000000000000000000000000000000000000000000000")
                 {
                     if (!thisTrx.type || thisTrx.type === 0)
@@ -1546,19 +1586,41 @@ logger.warn(e);
                         // get address balance
                         const balanceInfo = await Balance.findOne({addressString: thisTrx.from.toUpperCase(), token: null});
 
-                        if (!balanceInfo)
+                        let nativependingKey = `${thisTrx.from.toUpperCase()}:native`;
+
+                        if (!balanceInfo && !pendingAmounts[nativependingKey])
                         {
                             logger.warn("Transaction Missing Account Balance " + thisTrx.txid + " Address: " +  thisTrx.from.toUpperCase());
                             isValid = false;
+                            break;
                         }
-                        else
+                        else if (!balanceInfo)
                         {
+                            const pendingAmount = pendingAmounts[nativependingKey] || 0;
+
                             const totalTxAmount = Big(thisTrx.amount).plus(thisTrx.fee).toFixed();
 
-                            if (Big(totalTxAmount).gt(balanceInfo.balance))
+                            if (Big(totalTxAmount).gt(pendingAmount))
                             {
                                 logger.warn("Transaction Amount Exceeds Account Balance " + thisTrx.txid + " Value: " + totalTxAmount + " >  Balance: " + balanceInfo.balance);
                                 isValid = false;
+                                break;
+                            }
+                        }
+                        else
+                        {
+
+                            const pendingAmount = pendingAmounts[nativependingKey] || 0;
+
+                            const totalTxAmount = Big(thisTrx.amount).plus(thisTrx.fee).toFixed();
+
+                            const totalAvailable = Big(balanceInfo.balance).plus(pendingAmount);
+
+                            if (Big(totalTxAmount).gt(totalAvailable))
+                            {
+                                logger.warn("Transaction Amount Exceeds Account Balance " + thisTrx.txid + " Value: " + totalTxAmount + " >  Balance: " + balanceInfo.balance);
+                                isValid = false;
+                                break;
                             }
                         }
                     }
@@ -1566,33 +1628,63 @@ logger.warn(e);
                     {
                         // token transfer
 
-                        if (!thisTrx.token) isValid = false;
+                        if (!thisTrx.token) {
+                            isValid = false;
+                            break;
+                        }
 
                         const tokenInfo = await Token.findOne({tokenId: thisTrx.token.toUpperCase()});
 
-                        if (!tokenInfo) isValid = false;
+                        if (!tokenInfo) {
+                            isValid = false;
+                            break;
+                        }
+
+                        let nativependingKey = `${thisTrx.from.toUpperCase()}:native`;
+                        let tokenKey = thisTrx.token.toUpperCase();
+                        let tokenpendingKey = `${thisTrx.from.toUpperCase()}:${tokenKey}`;
 
                         // get address native balance
-                        const balanceInfo = await Balance.findOne({addressString: thisTrx.from.toUpperCase(), token: null});
+                        let balanceInfo = await Balance.findOne({addressString: thisTrx.from.toUpperCase(), token: null});
 
-                        if (!balanceInfo)
+                        if (!balanceInfo && !pendingAmounts[nativependingKey])
                         {
                             logger.warn("Transaction Missing Account Balance " + thisTrx.txid + " Address: " +  thisTrx.from.toUpperCase());
                             isValid = false;
+                            break;
+                        }
+                        else if (!balanceInfo)
+                        {
+                            balanceInfo = {balance: pendingAmounts[nativependingKey]};
+                        }
+                        else if (pendingAmounts[nativependingKey])
+                        {
+                            balanceInfo.balance = balanceInfo.balance + pendingAmounts[nativependingKey];
                         }
                         
                         // get address token balance
-                        const tokenBalanceInfo = await Balance.findOne({addressString: thisTrx.from.toUpperCase(), token: tokenInfo._id});
+                        let tokenBalanceInfo = await Balance.findOne({addressString: thisTrx.from.toUpperCase(), token: tokenInfo._id});
 
-                        if (!tokenBalanceInfo)
+
+                        if (!tokenBalanceInfo && !pendingAmounts[tokenpendingKey])
                         {
                             logger.warn("Transaction Missing Token Account Balance " + thisTrx.txid + " Address: " +  thisTrx.from.toUpperCase());
                             isValid = false;
+                            break;
+                        }
+                        else if (!tokenBalanceInfo)
+                        {
+                            tokenBalanceInfo = {balance: pendingAmounts[tokenpendingKey]};
+                        }
+                        else if (pendingAmounts[tokenpendingKey])
+                        {
+                            balanceInfo.balance = balanceInfo.balance + pendingAmounts[tokenpendingKey];
                         }
 
                         if (!balanceInfo || !tokenBalanceInfo) 
                         {
                             isValid = false;
+                            break;
                         }
                         else
                         {
@@ -1602,6 +1694,7 @@ logger.warn(e);
                             {
                                 logger.warn("Transaction Amount Exceeds Account Native Balance " + thisTrx.txid + " FeeValue: " + txFeeAmount + " >  Balance: " + balanceInfo.balance);
                                 isValid = false;
+                                break;
                             }
 
                             const tokenAmount = Big(thisTrx.tokenAmount).toFixed();
@@ -1610,6 +1703,7 @@ logger.warn(e);
                             {
                                 logger.warn("Transaction Amount Exceeds Account Token Balance " + thisTrx.txid + " Value: " + tokenAmount + " >  Balance: " + tokenBalanceInfo.balance);
                                 isValid = false;
+                                break;
                             }
 
                         }
@@ -1625,7 +1719,7 @@ logger.warn(e);
             let networkTimestamp = Math.round(Date.now()/1000);
 
             try {
-                isValid = await PandaniteCore.checkBlockValid(block, "0000000000000000000000000000000000000000000000000000000000000000", 0, this.difficulty, networkTimestamp, medianTimestamp);
+                isValid = await PandaniteCore.checkBlockValid(block, "0000000000000000000000000000000000000000000000000000000000000000", 0, this.difficulty, networkTimestamp, medianTimestamp, 0);
             } catch (e) {
                 logger.warn(e);
                 throw new Error(e);
@@ -1657,6 +1751,7 @@ logger.warn(e);
                 blockHash: block.hash.toUpperCase(),
                 lastBlockHash: block.lastBlockHash.toUpperCase(),
                 transactions: [],
+                blockReward: blockReward,
                 createdAt: Date.now(),
                 updatedAt: Date.now()
             };

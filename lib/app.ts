@@ -17,7 +17,7 @@ class App {
         this.config();
         this.mongoSetup();
         this.routePrv.routes(this.app);        
-        this.jobsPrv.syncPeers(); 
+        this.jobsPrv.startBlockchain(); 
     }
 
     private config(): void{

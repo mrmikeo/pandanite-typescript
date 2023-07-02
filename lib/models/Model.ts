@@ -185,6 +185,9 @@ export const blockSchema = new Schema({
         type: Schema.Types.ObjectId,
         ref: 'Transaction'
     }],
+    blockReward: {
+        type: Number
+    },
     createdAt: {
         type: Number,
         default: Date.now

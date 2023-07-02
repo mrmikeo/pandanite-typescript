@@ -9,4 +9,5 @@ export class Constants {
     static readonly TRANSACTIONINFO_BUFFER_SIZE = 149;
     static readonly NATIVE_ASSET_TICKER = "PDN";
     static readonly NATIVE_ASSET_NAME = "Pandanite";
+    static readonly DECIMAL_SCALE_FACTOR = 10000;
 }
