@@ -1002,6 +1002,9 @@ logger.warn(e);
                         try {
 
                             const client = new WebSocket(peer.replace("http://", "ws://"));
+
+                            client.on('error', console.error);
+
                             client.on('open', function open() {
 
                                 that.websocketPeers[peer] = client;
