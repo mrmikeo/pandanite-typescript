@@ -536,7 +536,7 @@ export class PandaniteJobs{
                 const times: Array<number> = [];
 
                 // get last 10 blocktimes
-                const tenBlocks = await Block.find({height: {$gt: lastBlockHeight - 10}}).sort({height: -1});
+                const tenBlocks = await Block.find({height: {$gt: lastBlockHeight - 10}}).sort({height: -1}).limit(10);
                 for (let i = 0; i < tenBlocks.length; i++) {
                   times.push(parseInt(tenBlocks[i].timestamp));
                 }
@@ -581,7 +581,7 @@ export class PandaniteJobs{
 
                     if (thisTx.fromAddress.address !== "00000000000000000000000000000000000000000000000000" && thisTx.fromAddress.address !== "")
                     {
-                        let deductionAmount = Number(Big(transactionAmount).plus(thisTx.fee).times(-1).toFixed(0));
+                        const deductionAmount = Number(Big(transactionAmount).plus(thisTx.fee).times(-1).toFixed(0));
                         await Balance.updateOne({address: thisTx.fromAddress._id, token: thisTx.token}, {$inc: {balance: deductionAmount}});
                     }
 
@@ -1462,11 +1462,13 @@ logger.warn(e);
 
                     if (fromAddress.address !== "00000000000000000000000000000000000000000000000000" && fromAddress.address !== "")
                     {
-                        await Balance.updateOne({address: thisTx.fromAddress, token: thisTx.token}, {$inc: {balance: thisTx.amount}});
+                        const increaseAmount = Number(Big(thisTx.amount).plus(thisTx.fee).toFixed(0));
+                        await Balance.updateOne({address: thisTx.fromAddress, token: thisTx.token}, {$inc: {balance: increaseAmount}});
                     }
 
-                    const numbernegative = thisTx.amount * -1;
-                    await Balance.updateOne({address: thisTx.toAddress, token: thisTx.token}, {$inc: {balance: numbernegative}});
+                    const deductionAmount = Number(Big(thisTx.amount).times(-1).toFixed(0));
+
+                    await Balance.updateOne({address: thisTx.toAddress, token: thisTx.token}, {$inc: {balance: deductionAmount}});
 
                     await Transaction.deleteOne({_id: thisTx._id});
 
@@ -1833,7 +1835,7 @@ logger.warn(e);
 
                 if (thisTx.from !== "00000000000000000000000000000000000000000000000000" && thisTx.from !== "")
                 {
-                    let deductionAmount = Number(Big(transactionAmount).plus(thisTx.fee).times(-1).toFixed(0));
+                    const deductionAmount = Number(Big(transactionAmount).plus(thisTx.fee).times(-1).toFixed(0));
                     await Balance.updateOne({address: fromAddress._id, token: tokenId}, {$inc: {balance: deductionAmount}});
                 }
 
