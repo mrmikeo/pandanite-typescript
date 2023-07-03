@@ -442,6 +442,8 @@ export class PandaniteJobs{
         for (let i = 0; i < allBlocks.length; i++)
         {
 
+            if (i%1000==0) logger.info("Validated up to block: " + i);
+
             let isValid = false;
 
             const block = allBlocks[i];
