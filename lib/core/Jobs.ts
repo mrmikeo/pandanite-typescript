@@ -433,20 +433,21 @@ export class PandaniteJobs{
 
         await Balance.deleteMany();
 
-        const allBlocks = await Block.find().sort({height: 1});
+        const lastBlock = await Block.find().sort({height: -1}).limit(1);
+        const topBlockHeight = lastBlock?.height || 0;
 
         let lastBlockHash = "0000000000000000000000000000000000000000000000000000000000000000";
         let lastBlockHeight = 0;
         this.difficulty = 16; // Starting diff
 
-        for (let i = 0; i < allBlocks.length; i++)
+        for (let i = 1; i <= topBlockHeight; i++)
         {
 
             if (i%1000==0) logger.info("Validated up to block: " + i);
 
             let isValid = false;
 
-            const block = allBlocks[i];
+            const block = await Block.findOne({height: i});
 
             let blockinfo = {
                 difficulty: block.difficulty,
