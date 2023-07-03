@@ -431,10 +431,14 @@ export class PandaniteJobs{
 
     public async revalidateBlockchain() {
 
+        logger.warn("Revalidating blockchain...");
+
         await Balance.deleteMany();
 
+        let topBlockHeight = 0;
         const lastBlock = await Block.find().sort({height: -1}).limit(1);
-        const topBlockHeight = lastBlock?.height || 0;
+        if (lastBlock.length > 0)
+            topBlockHeight = lastBlock[0].height;
 
         let lastBlockHash = "0000000000000000000000000000000000000000000000000000000000000000";
         let lastBlockHeight = 0;
