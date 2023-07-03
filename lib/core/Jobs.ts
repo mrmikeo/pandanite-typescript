@@ -327,6 +327,7 @@ export class PandaniteJobs{
                         try {
                             that.websocketPeers[thisPeer].send(JSON.stringify(message));
                         } catch (e) {
+                            logger.warn(e);
                             delete that.wsRespFunc[messageId];
                             delete that.websocketPeers[thisPeer];
                         }
@@ -573,7 +574,8 @@ export class PandaniteJobs{
 
                     if (thisTx.fromAddress.address !== "00000000000000000000000000000000000000000000000000" && thisTx.fromAddress.address !== "")
                     {
-                        await Balance.updateOne({address: thisTx.fromAddress._id, token: thisTx.token}, {$inc: {balance: -transactionAmount}});
+                        let deductionAmount = Number(Big(transactionAmount).plus(thisTx.fee).times(-1).toFixed(0));
+                        await Balance.updateOne({address: thisTx.fromAddress._id, token: thisTx.token}, {$inc: {balance: deductionAmount}});
                     }
 
                     const haveToBalance = await Balance.findOne({address: thisTx.toAddress._id, token: thisTx.token});
@@ -973,6 +975,7 @@ logger.warn(e);
                                 this.websocketPeers[peer].send(JSON.stringify(message));
                             } catch (e) {
                                 // could not send message
+                                logger.warn(e);
                                 delete that.wsRespFunc[messageId];
                                 delete this.websocketPeers[peer]
                             }
@@ -1079,6 +1082,7 @@ logger.warn(e);
                                 try {
                                     this.send(JSON.stringify(message));
                                 } catch (e) {
+                                    logger.warn(e);
                                     delete that.wsRespFunc[messageId];
                                     delete that.websocketPeers[peer]
                                 }
@@ -1550,41 +1554,12 @@ logger.warn(e);
 
             // Poor previous design requires this in order to sync :(
             const excludedTransactions = [
-                "9B756E997F65772E54804D1373B5C6AEBB35555C61FDB0AA1AA54E47DDF1D2BE",
-                "01703A6C8F63E0808FDA4BD79C773F99BDB724679009E94B6930CE8846817CDD",
-                "ED1730F04A28C218BAB179DF6D577C4893519F070FA1F80B9D9D06A27DB082CE",
-                "A5E0D39CDF60989D9B688A9776B3AE7B279404B21A4024A6353B0A2AC6B34486",
-                "0E0084700FA9C912E7168572DDC2169944C9CF89DEC87A3DF68EE1945840D753",
-                "98F834ADAAA55A9F859587F205C7A77CB6547899C2178A71CD0B98A41557FCB9",
-                "F87D16EC1AAC2041D859341E4B822B9274F47F203EEE206BF5134FC70027A778",
-                "0EE17D6B2FCCC7BA2C20FEF8B16F49BC62CC89EBCE2C4870B35818AB8D4C1364",
-                "5A2FBD32F6B2E5D92E6DA8148E1FE3AE5F836B6010AA6B3DDAE2C07FCE4C698C",
-                "21456AAE93444303FF0061396665D147D34049FF478DF6FA9F3FF50C0D8C3DA3",
-                "AEE2547337F989433DD2166B2CFBC070128EB2A1A8EC7CFAFC030158ADBD3BF2",
-                "28CBBCE328260875310F3445FC3EC0C162788DFA8C27BFB41BB4C0BE701C8F92",
-                "74A2F60D9FB913EA9719EC218FA8F84483E1D27A913A597E33A9CD9FE093F975",
-                "672B5623CF954519DDCF5FD7DF5652B0D131AD7A3B64E25C13A3CD6BC71CADB9",
-                "D1A9C856D964A05AF7B4E8EFE805E3FCAAE34839C8CE9B7355EE16190128FD8C",
-                "505D6E91621CC2465E0F6BBFC08800A0B4B3A8F080FF98FC8AF38E090AD6AF42",
-                "A1E32D847C668C4F71574875ED085085DDBB04629001B4ACDD43417EB1E6F564",
 
-                "7012A985AA3BF07B41EFE0417D16BEDAF4D3695C2BECEE432B09FD7AF1B65E8F",
-                "06039CD789E84A7A0D09A5E9BBC9DD9EC947A1569B5B36949E4FE44EBD665E59",
-                "F0B72EB45C1DF6CB19D6D5EE4F94F5F8A2C16742412FB3C2174C0306FFC905BE",
-                "06039CD789E84A7A0D09A5E9BBC9DD9EC947A1569B5B36949E4FE44EBD665E59",
-                "C335304F2ABE8150C5E67991CEBEA7EAFF334AB1426627857F87DF2986554306",
-                "E379AC29F25F80639711F6512BEC6BF2A851605DF55DF7956E11DEA98E49CA53",
-                "0582441050ADA86C2BA0AC16D8F5177A8080DFACAFE3F41384A3320F930ABC9B",
-                "8B6AFC8F2B06E64674C71DA733674E887AC931FDBE010504279FFE42397A8C20",
-                "2EFA0DD20CB1B91FDD6A66274DDA376F4C3EB8B955971D2414B160DFD8780479",
-                "9DA0C4D23E0D86B3AA6495E77067164154D2DFB570F7E2221347348D66B21A73",
-                "A8C164F96EAA8FD97DF628B2A0E4B4FF3EEE4DA549A5329510D2716AE82B5622",
-                "7ECD2A7F1D14632A8C833291436709BEA6624184A0ED42137D170C0D4634296A"
             ];
 
             let pendingAmounts = {};
 
-            // Check Balances
+            // Check Balances - excluded for block height < 500,000 as there are a few transactions that do not pass this test
             if (block.id > 500000)
             for (let i = 0; i < block.transactions.length; i++)
             {
@@ -1851,7 +1826,8 @@ logger.warn(e);
 
                 if (thisTx.from !== "00000000000000000000000000000000000000000000000000" && thisTx.from !== "")
                 {
-                    await Balance.updateOne({address: fromAddress._id, token: tokenId}, {$inc: {balance: -transactionAmount}});
+                    let deductionAmount = Number(Big(transactionAmount).plus(thisTx.fee).times(-1).toFixed(0));
+                    await Balance.updateOne({address: fromAddress._id, token: tokenId}, {$inc: {balance: deductionAmount}});
                 }
 
                 const haveToBalance = await Balance.findOne({address: toAddress._id, token: tokenId});
