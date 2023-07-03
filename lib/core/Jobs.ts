@@ -9,7 +9,7 @@ import * as WebSocket from 'ws';
 import { v4 as uuidv4 } from 'uuid';
 
 import { createLogger, format, transports } from 'winston';
-import { keys } from 'underscore';
+
 const { combine, timestamp, label, printf } = format;
 
 const myFormat = printf(({ level, message, timestamp }) => {
@@ -883,14 +883,14 @@ export class PandaniteJobs{
             if (splitPeer[0] != this.myIpAddress)
             {  
 
-                if (this.peerVersions[peer] === 2) // PEER VERSION 2
+                if (that.peerVersions[peer] === 2) // PEER VERSION 2
                 {
 
                     // Check if already connected to v2 peer
-                    if (this.websocketPeers[peer])
+                    if (that.websocketPeers[peer])
                     {
                         // check if websocket is still open
-                        if (this.websocketPeers[peer].readyState === WebSocket.OPEN)
+                        if (that.websocketPeers[peer].readyState === WebSocket.OPEN)
                         {
                             
                             // get stats
@@ -901,7 +901,7 @@ export class PandaniteJobs{
                                 messageId: messageId
                             };
 
-                            this.wsRespFunc[messageId] = async (peer: string, messageId: string, data: string) => {
+                            that.wsRespFunc[messageId] = async (peer: string, messageId: string, data: string) => {
 
                                 try {
 
@@ -979,14 +979,20 @@ logger.warn(e);
                             };
 
                             try {
-                                this.websocketPeers[peer].send(JSON.stringify(message));
+                                that.websocketPeers[peer].send(JSON.stringify(message));
                             } catch (e) {
                                 // could not send message
                                 logger.warn(e);
                                 delete that.wsRespFunc[messageId];
-                                delete this.websocketPeers[peer]
+                                delete that.websocketPeers[peer]
                             }
                             
+                        }
+                        else
+                        {
+
+                            delete that.websocketPeers[peer];
+
                         }
 
                     }
@@ -996,9 +1002,9 @@ logger.warn(e);
                         try {
 
                             const client = new WebSocket(peer.replace("http://", "ws://"));
-                            client.onopen = function() {
+                            client.on('open', function open() {
 
-                                that.websocketPeers[peer] = this;
+                                that.websocketPeers[peer] = client;
 
                                 // get stats
 
@@ -1087,14 +1093,14 @@ logger.warn(e);
                                 };
 
                                 try {
-                                    this.send(JSON.stringify(message));
+                                    that.websocketPeers[peer].send(JSON.stringify(message));
                                 } catch (e) {
                                     logger.warn(e);
                                     delete that.wsRespFunc[messageId];
                                     delete that.websocketPeers[peer]
                                 }
 
-                            }
+                            });
                             
                             client.on('message', function message(data) {
 
@@ -1119,6 +1125,8 @@ logger.warn(e);
 
                                 logger.warn('Websocket disconnected from peer: ' + peer);
 
+                                delete that.websocketPeers[peer];
+
                                 // cleanup any open respfunc
                                 const peerHex = that.stringToHex(peer);
 
@@ -1134,8 +1142,6 @@ logger.warn(e);
                                     }
 
                                 }
-
-                                delete that.websocketPeers[peer];
 
                             });
 
