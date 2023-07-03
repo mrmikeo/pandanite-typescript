@@ -554,7 +554,7 @@ export class PandaniteJobs{
             let networkTimestamp = Math.round(Date.now()/1000);
 
             try {
-                isValid = await PandaniteCore.checkBlockValid(block, lastBlockHash, lastBlockHeight, this.difficulty, networkTimestamp, medianTimestamp, block.blockReward);
+                isValid = await PandaniteCore.checkBlockValid(blockinfo, lastBlockHash, lastBlockHeight, this.difficulty, networkTimestamp, medianTimestamp, block.blockReward);
             } catch (e) {
                 logger.warn(e);
                 isValid = false;
