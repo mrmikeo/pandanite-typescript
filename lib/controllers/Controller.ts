@@ -548,42 +548,43 @@ export class ApiController{
 
             const peerUrl = "http://" + hostname + ":" + port;
 
-            let havePeer = await Peer.countDocuments({url: peerUrl});
+            const peerresponse = await axios({
+                url: peerUrl + "/name",
+                method: 'get',
+                responseType: 'json'
+            });
 
-            if (havePeer === 0)
+            const data = peerresponse.data;
+
+            if (data.networkName == globalThis.networkName)
             {
 
-                try {
+                let havePeer = await Peer.countDocuments({url: peerUrl});
 
-                    const peerresponse = await axios({
-                        url: peerUrl + "/name",
-                        method: 'get',
-                        responseType: 'json'
+                if (havePeer === 0)
+                {
+
+                    await Peer.create({
+                        url: peerUrl,
+                        ipAddress: hostname,
+                        port: port,
+                        lastSeen: 0,
+                        isActive: true,
+                        lastHeight: 0,
+                        networkName: globalThis.networkName,
+                        createdAt: Date.now(),
+                        updatedAt: Date.now()
                     });
 
-                    const data = peerresponse.data;
+                }
+                else
+                {
 
-                    if (data.networkName == globalThis.networkName)
-                    {
-
-                        await Peer.create({
-                            url: peerUrl,
-                            ipAddress: hostname,
-                            port: port,
-                            lastSeen: 0,
-                            isActive: true,
-                            lastHeight: 0,
-                            networkName: globalThis.networkName,
-                            createdAt: Date.now(),
-                            updatedAt: Date.now()
-                        });
-
-                    }
-
-                } catch (e) {
-
+                    await Peer.updateMany({url: peerUrl}, {$set: {isActive: true, updatedAt: Date.now()}});
 
                 }
+
+                console.log("received notification from new peer: " + peerUrl)
 
             }
 
