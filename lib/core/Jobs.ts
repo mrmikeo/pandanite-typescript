@@ -1519,10 +1519,11 @@ logger.warn(e);
         {
 
             let nextHeight = this.myBlockHeight + 1;
+            let runs = 0;
 
-            while (nextHeight > 0)
+            while (runs < 500)
             {
-
+                runs++;
                 if (this.downloadedBlocks[nextHeight] && this.downloadedBlocks[nextHeight] !== 'pending')
                 {
 
