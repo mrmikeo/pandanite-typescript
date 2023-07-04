@@ -267,23 +267,21 @@ export class PandaniteJobs{
 
         // start jobs for syncing peers list & blocks
 
-        const that = this;
-
         const workerFunction: Worker<number> = async (thisPeer, height) => {
 
             try {
 
-                if (that.peerHeights[thisPeer] >= height)
+                if (this.peerHeights[thisPeer] >= height)
                 {
                     // has blocks we can download
 
                     // what version is this peer? can we do ws?
-                    if (that.websocketPeers[thisPeer])
+                    if (this.websocketPeers[thisPeer])
                     {
 
                         // get block via websocket
 
-                        const messageId = that.stringToHex(thisPeer) + "." + uuidv4();
+                        const messageId = this.stringToHex(thisPeer) + "." + uuidv4();
 
                         const message = {
                             method: 'getBlock',
@@ -291,7 +289,7 @@ export class PandaniteJobs{
                             messageId: messageId
                         };
 
-                        that.wsRespFunc[messageId] = (peer: string, messageId: string, data: string) => {
+                        this.wsRespFunc[messageId] = (peer: string, messageId: string, data: string) => {
 
                             try {
 
@@ -301,20 +299,20 @@ export class PandaniteJobs{
                                 if (jsondata && jsondata.hash)
                                 {
 
-                                    that.downloadedBlocks[height] = jsondata;
-                                    delete that.wsRespFunc[messageId];
+                                    this.downloadedBlocks[height] = jsondata;
+                                    delete this.wsRespFunc[messageId];
 
                                 }
                                 else
                                 {
                                     //const index = this.activePeers.indexOf(thisPeer);
                                     //if (index > -1) {
-                                    //    this.activePeers.splice(index, 1);
+                                    //    this.activePeers.splice(index, index);
                                     //}
-                                    delete that.downloadedBlocks[height];
+                                    delete this.downloadedBlocks[height];
                                     //this.queueProcessor.removeWorker(thisPeer);
-                                    that.queueProcessor.requeue(height);
-                                    delete that.wsRespFunc[messageId];
+                                    this.queueProcessor.requeue(height);
+                                    delete this.wsRespFunc[messageId];
                                 }
 
                             } catch (e) {
@@ -325,11 +323,11 @@ export class PandaniteJobs{
                         };
 
                         try {
-                            that.websocketPeers[thisPeer].send(JSON.stringify(message));
+                            this.websocketPeers[thisPeer].send(JSON.stringify(message));
                         } catch (e) {
                             logger.warn(e);
-                            delete that.wsRespFunc[messageId];
-                            delete that.websocketPeers[thisPeer];
+                            delete this.wsRespFunc[messageId];
+                            delete this.websocketPeers[thisPeer];
                         }
                     }
                     else
@@ -349,10 +347,6 @@ export class PandaniteJobs{
                         }
                         else
                         {
-                            const index = this.activePeers.indexOf(thisPeer);
-                            if (index > -1) {
-                                this.activePeers.splice(index, 1);
-                            }
                             delete this.downloadedBlocks[height];
                             this.queueProcessor.removeWorker(thisPeer);
                             this.queueProcessor.requeue(height);
@@ -370,12 +364,10 @@ export class PandaniteJobs{
                 }
 
             } catch (e) {
-    
-                const index = this.activePeers.indexOf(thisPeer);
-                if (index > -1) {
-                    this.activePeers.splice(index, 1);
-                }
-    
+
+console.log("Peer catch " + thisPeer);
+
+                this.removeActivePeer(thisPeer);
                 delete this.downloadedBlocks[height];
                 this.queueProcessor.removeWorker(thisPeer);
                 this.queueProcessor.requeue(height);
@@ -395,6 +387,8 @@ export class PandaniteJobs{
         await this.updateDifficultyForHeight(lastDiffHeight);
 
         this.checkPeers();
+
+        var that = this;
 
         // Interval jobs
         setInterval(function() {
@@ -421,6 +415,24 @@ export class PandaniteJobs{
             }
         }, 1000);
 
+    }
+
+    public removeActivePeer (value: string) { 
+    
+        let filtered = [];
+
+        for (let i = 0; i < this.activePeers.length; i++)
+        {
+            let thisPeer = this.activePeers[i];
+
+            if (thisPeer !== value)
+            {
+                filtered.push(thisPeer);
+            }
+
+        }
+
+        this.activePeers = JSON.parse(JSON.stringify(filtered));
     }
 
     public async checkLocks() {
@@ -860,8 +872,7 @@ export class PandaniteJobs{
 
         this.checkingPeers = true;
         this.checkPeerLock = Date.now();
-        const that = this;
-
+        
         const peerList = await Peer.find({isActive: true});
 
         this.pendingPeers = [];
@@ -875,7 +886,7 @@ export class PandaniteJobs{
 
         if (this.pendingPeers.length === 0)
         {
-            console.log("no pending peers.  setting to default")
+            logger.warn("No active peers.  Using default peers")
             this.pendingPeers = globalThis.defaultPeers;
         }
 
@@ -887,14 +898,14 @@ export class PandaniteJobs{
             if (splitPeer[0] !== this.myIpAddress)
             {  
 
-                if (that.peerVersions[peer] === 2) // PEER VERSION 2
+                if (this.peerVersions[peer] === 2) // PEER VERSION 2
                 {
 
                     // Check if already connected to v2 peer
-                    if (that.websocketPeers[peer])
+                    if (this.websocketPeers[peer])
                     {
                         // check if websocket is still open
-                        if (that.websocketPeers[peer].readyState === WebSocket.OPEN)
+                        if (this.websocketPeers[peer].readyState === WebSocket.OPEN)
                         {
                             
                             // get stats
@@ -905,7 +916,7 @@ export class PandaniteJobs{
                                 messageId: messageId
                             };
 
-                            that.wsRespFunc[messageId] = async (peer: string, messageId: string, data: string) => {
+                            this.wsRespFunc[messageId] = async (peer: string, messageId: string, data: string) => {
 
                                 try {
 
@@ -916,12 +927,14 @@ export class PandaniteJobs{
 
                                     if (jsondata.network_name != globalThis.networkName) throw new Error('Bad Peer NetworkName');
 
-                                    that.peerVersions[peer] = 2; // assumed since this is ws
+                                    this.peerVersions[peer] = 2; // assumed since this is ws
             
-                                    if (!that.activePeers.includes(peer))
-                                        that.activePeers.push(peer);
-            
-                                    that.peerHeights[peer] = parseInt(jsondata.current_block);
+                                    if (!this.activePeers.includes(peer))
+                                    {
+                                        this.activePeers.push(peer);
+                                    }
+
+                                    this.peerHeights[peer] = parseInt(jsondata.current_block);
             
                                     const havePeer = await Peer.countDocuments({url: peer});
             
@@ -973,13 +986,13 @@ export class PandaniteJobs{
                                         }});
                                     }
 
-                                    delete that.wsRespFunc[messageId];
+                                    delete this.wsRespFunc[messageId];
 
                                     logger.info("Peer " + peer + ": OK");
 
                                 } catch (e) {
 logger.warn(e);
-                                    delete that.wsRespFunc[messageId];
+                                    delete this.wsRespFunc[messageId];
 
                                     logger.warn("Peer " + peer + ": NOTOK");
                                 }
@@ -987,20 +1000,20 @@ logger.warn(e);
                             };
 
                             try {
-                                that.websocketPeers[peer].send(JSON.stringify(message));
+                                this.websocketPeers[peer].send(JSON.stringify(message));
                             } catch (e) {
                                 // could not send message
                                 logger.warn("Peer " + peer + ": NOTOK");
                                 logger.warn(e);
-                                delete that.wsRespFunc[messageId];
-                                delete that.websocketPeers[peer]
+                                delete this.wsRespFunc[messageId];
+                                delete this.websocketPeers[peer]
                             }
                             
                         }
                         else
                         {
 
-                            delete that.websocketPeers[peer];
+                            delete this.websocketPeers[peer];
 
                         }
 
@@ -1009,6 +1022,8 @@ logger.warn(e);
                     {
                         // Try to connect socket
                         try {
+
+                            var that = this;
 
                             const client = new WebSocket(peer.replace("http://", "ws://"), {handshakeTimeout: 3000, timeout: 3000});
 
@@ -1041,8 +1056,10 @@ logger.warn(e);
                                         that.peerVersions[peer] = 2; // assumed since this is ws
                 
                                         if (!that.activePeers.includes(peer))
+                                        {
                                             that.activePeers.push(peer);
-                
+                                        }
+
                                         that.peerHeights[peer] = parseInt(jsondata.current_block);
                 
                                         const havePeer = await Peer.countDocuments({url: peer});
@@ -1097,6 +1114,11 @@ logger.warn(e);
 
                                         logger.info("Peer " + peer + ": OK");
 
+                                        if (!that.activePeers.includes(peer))
+                                        {
+                                            that.activePeers.push(peer);
+                                        }
+
                                         delete that.wsRespFunc[messageId];
 
                                     } catch (e) {
@@ -1143,10 +1165,7 @@ logger.warn(e);
 
                                 delete that.websocketPeers[peer];
 
-                                const index = that.activePeers.indexOf(peer);
-                                if (index > -1) {
-                                    that.activePeers.splice(index, 1)
-                                }
+                                that.removeActivePeer(peer);
 
                                 await Peer.updateOne({url: peer}, {$set: {isActive: false, updatedAt: Date.now()}});
 
@@ -1172,7 +1191,7 @@ logger.warn(e);
 
                             logger.warn("Peer " + peer + ": NOTOK");
                             logger.warn(e);
-                            delete that.websocketPeers[peer]
+                            delete this.websocketPeers[peer]
 
                         }
 
@@ -1200,20 +1219,22 @@ logger.warn(e);
                             let splitVersion = data.node_version.split(".");
                             if (parseInt(splitVersion[0]) >= 2)
                             {
-                                that.peerVersions[peer] = 2;
+                                this.peerVersions[peer] = 2;
                             }
                         }
                         else
                         {
-                            that.peerVersions[peer] = 1;
+                            this.peerVersions[peer] = 1;
                         }
 
                         logger.info("Peer " + peer + ": OK");
 
-                        if (!that.activePeers.includes(peer))
-                        that.activePeers.push(peer);
+                        if (!this.activePeers.includes(peer))
+                        {
+                            this.activePeers.push(peer);
+                        }
 
-                        that.peerHeights[peer] = parseInt(data.current_block);
+                        this.peerHeights[peer] = parseInt(data.current_block);
 
                         const havePeer = await Peer.countDocuments({url: peer});
         
@@ -1277,10 +1298,7 @@ logger.warn(e);
 
                         // peer timeout or some other issue - remove until somebody tells us its active again
 
-                        const index = that.activePeers.indexOf(peer);
-                        if (index > -1) {
-                            that.activePeers.splice(index, 1)
-                        }
+                        this.removeActivePeer(peer);
                         
                     }
 
@@ -1302,37 +1320,78 @@ logger.warn(e);
         this.findingPeers = true;
         this.findPeerLock = Date.now();
 
-        this.activePeers.forEach(peer => {
+        this.activePeers.forEach(async (peer) => {
 
-            (async () => {
+            try {
 
-                try {
+                const response = await axios({
+                    url: peer + "/peers",
+                    method: 'get',
+                    responseType: 'json'
+                });
 
-                    const response = await axios({
-                        url: peer + "/peers",
-                        method: 'get',
-                        responseType: 'json'
-                    });
+                const data = response.data;
 
-                    const data = response.data;
+                for (let i = 0; i < data.length; i++)
+                {
 
-                    for (let i = 0; i < data.length; i++)
+                    let thisPeer = data[i];
+
+                    let stripPeer = thisPeer.replace('http://', '');
+                    let splitPeer = stripPeer.split(":");
+
+                    if (!["localhost", "127.0.0.1", this.myIpAddress].includes(splitPeer[0])) // don't peer with yourself.
                     {
 
-                        let thisPeer = data[i];
+                        let havePeer = await Peer.countDocuments({url: thisPeer});
 
-                        let stripPeer = thisPeer.replace('http://', '');
-                        let splitPeer = stripPeer.split(":");
-
-                        if (!["localhost", "127.0.0.1", this.myIpAddress].includes(splitPeer[0])) // don't peer with yourself.
+                        if (havePeer === 0)
                         {
 
-                            let havePeer = await Peer.countDocuments({url: thisPeer});
+                            try {
 
-                            if (havePeer === 0)
-                            {
+                                const peerresponse = await axios({
+                                    url: thisPeer + "/name",
+                                    method: 'get',
+                                    responseType: 'json'
+                                });
+            
+                                const data = peerresponse.data;
 
-                                try {
+                                if (data.networkName == globalThis.networkName)
+                                {
+
+                                    await Peer.create({
+                                        url: thisPeer,
+                                        ipAddress: splitPeer[0],
+                                        port: splitPeer[1],
+                                        lastSeen: 0,
+                                        isActive: true,
+                                        lastHeight: 0,
+                                        networkName: globalThis.networkName,
+                                        createdAt: Date.now(),
+                                        updatedAt: Date.now()
+                                    });
+
+                                    logger.info("Found new peer " + thisPeer);
+
+                                }
+
+                            } catch (e) {
+
+
+                            }
+    
+                        }
+                        else if (havePeer === 1)
+                        {
+
+                            try {
+
+                                let haveActivePeer = await Peer.countDocuments({url: thisPeer, isActive: true});
+
+                                if (haveActivePeer === 0)
+                                {
 
                                     const peerresponse = await axios({
                                         url: thisPeer + "/name",
@@ -1345,81 +1404,36 @@ logger.warn(e);
                                     if (data.networkName == globalThis.networkName)
                                     {
 
-                                        await Peer.create({
-                                            url: thisPeer,
-                                            ipAddress: splitPeer[0],
-                                            port: splitPeer[1],
-                                            lastSeen: 0,
-                                            isActive: true,
-                                            lastHeight: 0,
-                                            networkName: globalThis.networkName,
-                                            createdAt: Date.now(),
-                                            updatedAt: Date.now()
-                                        });
+                                        await Peer.updateOne({url: thisPeer}, {$set: {isActive: true, updatedAt: Date.now()}})
 
-                                        logger.info("Found new peer " + thisPeer);
+                                        logger.info("Updating peer to active " + thisPeer);
 
                                     }
 
-                                } catch (e) {
-
-
-                                }
-        
-                            }
-                            else if (havePeer === 1)
-                            {
-
-                                try {
-
-                                    let haveActivePeer = await Peer.countDocuments({url: thisPeer, isActive: true});
-
-                                    if (haveActivePeer === 0)
-                                    {
-
-                                        const peerresponse = await axios({
-                                            url: thisPeer + "/name",
-                                            method: 'get',
-                                            responseType: 'json'
-                                        });
-                    
-                                        const data = peerresponse.data;
-
-                                        if (data.networkName == globalThis.networkName)
-                                        {
-
-                                            await Peer.updateOne({url: thisPeer}, {$set: {isActive: true, updatedAt: Date.now()}})
-
-                                            logger.info("Updating peer to active " + thisPeer);
-
-                                        }
-
-                                    }
-
-                                } catch (e) {
-
-
                                 }
 
-                            }
-                            else if (havePeer > 1)
-                            {
-                                // too many records for same peer - reset 
-                                await Peer.deleteMany({url: thisPeer});
+                            } catch (e) {
+
 
                             }
+
+                        }
+                        else if (havePeer > 1)
+                        {
+                            // too many records for same peer - reset 
+                            await Peer.deleteMany({url: thisPeer});
 
                         }
 
                     }
 
-                } catch (e) {
-
-                    // peer timeout
-                    
                 }
 
-            })();
+            } catch (e) {
+
+                // peer timeout
+                
+            }
 
         });
 
@@ -1466,7 +1480,6 @@ logger.warn(e);
                 }
             }
 
-            let queuedCount = 0;
             for (let i = start; i <= end; i++)
             {
 
@@ -1474,7 +1487,6 @@ logger.warn(e);
                 {
                     this.downloadedBlocks[i] = 'pending';
                     this.queueProcessor.enqueue(i);
-                    queuedCount++;
                 }
                 
             }
@@ -1525,15 +1537,13 @@ logger.warn(e);
                         delete this.downloadedBlocks[nextHeight];
                         const previousHeight = nextHeight - 1;
                         await this.doBlockRollback(previousHeight);
-                        this.queueProcessor.requeue(nextHeight);
-                        nextHeight = 0;
+                        this.queueProcessor.requeue(previousHeight);
                         break;
                     }
 
                 }
                 else
                 {
-                    nextHeight = 0;
                     break;
                 }
                 
