@@ -33,7 +33,7 @@ const Block = mongoose.model('Block', blockSchema);
 const Peer = mongoose.model('Peer', peerSchema);
 const Mempool = mongoose.model('Mempool', mempoolSchema);
 
-axios.defaults.timeout === 3000;
+axios.defaults.timeout = 3000;
 
 /***
  * This queue is for downloading the blockchain, but can be used for any purpose that requires a queue with one or more workers
@@ -866,6 +866,8 @@ console.log("running checkPeers");
 
         const peerList = await Peer.find({isActive: true});
 
+        this.pendingPeers = [];
+        
         for (let i = 0; i < peerList.length; i++)
         {
             let thisPeer = peerList[i];
@@ -875,14 +877,18 @@ console.log("running checkPeers");
 
         if (this.pendingPeers.length === 0)
         {
+            console.log("no pending peers.  setting to default")
             this.pendingPeers = globalThis.defaultPeers;
         }
 
         this.pendingPeers.forEach(async (peer) => {
 
+console.log("Testing.. " + peer);
+
             let stripPeer = peer.replace('http://', '');
             let splitPeer = stripPeer.split(":");
-            if (splitPeer[0] != this.myIpAddress)
+
+            if (splitPeer[0] !== this.myIpAddress)
             {  
 
                 if (that.peerVersions[peer] === 2) // PEER VERSION 2
@@ -973,9 +979,13 @@ console.log("running checkPeers");
 
                                     delete that.wsRespFunc[messageId];
 
+                                    logger.info("Peer " + peer + ": OK");
+
                                 } catch (e) {
 logger.warn(e);
                                     delete that.wsRespFunc[messageId];
+
+                                    logger.warn("Peer " + peer + ": NOTOK");
                                 }
 
                             };
@@ -984,6 +994,7 @@ logger.warn(e);
                                 that.websocketPeers[peer].send(JSON.stringify(message));
                             } catch (e) {
                                 // could not send message
+                                logger.warn("Peer " + peer + ": NOTOK");
                                 logger.warn(e);
                                 delete that.wsRespFunc[messageId];
                                 delete that.websocketPeers[peer]
@@ -1003,7 +1014,7 @@ logger.warn(e);
                         // Try to connect socket
                         try {
 
-                            const client = new WebSocket(peer.replace("http://", "ws://"));
+                            const client = new WebSocket(peer.replace("http://", "ws://"), {handshakeTimeout: 3000, timeout: 3000});
 
                             client.on('error', console.error);
 
@@ -1088,10 +1099,13 @@ logger.warn(e);
                                             }});
                                         }
 
+                                        logger.info("Peer " + peer + ": OK");
+
                                         delete that.wsRespFunc[messageId];
 
                                     } catch (e) {
 logger.warn(e);
+                                        logger.warn("Peer " + peer + ": NOTOK");
                                         delete that.wsRespFunc[messageId];
                                     }
 
@@ -1100,6 +1114,7 @@ logger.warn(e);
                                 try {
                                     that.websocketPeers[peer].send(JSON.stringify(message));
                                 } catch (e) {
+                                    logger.warn("Peer " + peer + ": NOTOK");
                                     logger.warn(e);
                                     delete that.wsRespFunc[messageId];
                                     delete that.websocketPeers[peer]
@@ -1159,7 +1174,9 @@ logger.warn(e);
 
                         } catch (e) {
 
-logger.warn(e);
+                            logger.warn("Peer " + peer + ": NOTOK");
+                            logger.warn(e);
+                            delete that.websocketPeers[peer]
 
                         }
 
@@ -1174,27 +1191,33 @@ logger.warn(e);
                         const response = await axios.get(peer + "/stats");
                         const data = response.data;
 
-                        if (!data || parseInt(data.current_block) === 0) throw new Error('Bad Peer');
+                        if (!data || parseInt(data.current_block) === 0) {
+                            throw new Error('Bad Peer');
+                        }
 
-                        if (data.network_name && data.network_name != globalThis.networkName) throw new Error('Bad Peer NetworkName');
+                        if (data.network_name && data.network_name != globalThis.networkName) {
+                            throw new Error('Bad Peer NetworkName');
+                        }
 
                         if (data && data.node_version)
                         {
                             let splitVersion = data.node_version.split(".");
                             if (parseInt(splitVersion[0]) >= 2)
                             {
-                                this.peerVersions[peer] = 2;
+                                that.peerVersions[peer] = 2;
                             }
                         }
                         else
                         {
-                            this.peerVersions[peer] = 1;
+                            that.peerVersions[peer] = 1;
                         }
 
-                        if (!this.activePeers.includes(peer))
-                            this.activePeers.push(peer);
+                        logger.info("Peer " + peer + ": OK");
 
-                        this.peerHeights[peer] = parseInt(data.current_block);
+                        if (!that.activePeers.includes(peer))
+                        that.activePeers.push(peer);
+
+                        that.peerHeights[peer] = parseInt(data.current_block);
 
                         const havePeer = await Peer.countDocuments({url: peer});
         
@@ -1250,14 +1273,18 @@ logger.warn(e);
 
                     } catch (e) {
 
-                        // peer timeout or some other issue - set inactive until another peer tells us it's active again
+                        //console.log(e);
 
-                        const index = this.activePeers.indexOf(peer);
+                        logger.warn("Peer " + peer + ": NOTOK");
+
+                        await Peer.updateMany({url: peer}, {$set: {isActive: false, updatedAt: Date.now()}});
+
+                        // peer timeout or some other issue - remove until somebody tells us its active again
+
+                        const index = that.activePeers.indexOf(peer);
                         if (index > -1) {
-                            this.activePeers.splice(index, 1)
+                            that.activePeers.splice(index, 1)
                         }
-
-                        await Peer.updateOne({url: peer}, {$set: {isActive: false, updatedAt: Date.now()}});
                         
                     }
 
@@ -1311,28 +1338,37 @@ console.log("running findPeers");
                             if (havePeer === 0)
                             {
 
-                                const peerresponse = await axios({
-                                    url: thisPeer + "/name",
-                                    method: 'get',
-                                    responseType: 'json'
-                                });
-            
-                                const data = peerresponse.data;
+                                try {
 
-                                if (data.networkName == globalThis.networkName)
-                                {
-
-                                    await Peer.create({
-                                        url: peer,
-                                        ipAddress: splitPeer[0],
-                                        port: splitPeer[1],
-                                        lastSeen: 0,
-                                        isActive: true,
-                                        lastHeight: 0,
-                                        networkName: globalThis.networkName,
-                                        createdAt: Date.now(),
-                                        updatedAt: Date.now()
+                                    const peerresponse = await axios({
+                                        url: thisPeer + "/name",
+                                        method: 'get',
+                                        responseType: 'json'
                                     });
+                
+                                    const data = peerresponse.data;
+
+                                    if (data.networkName == globalThis.networkName)
+                                    {
+
+                                        await Peer.create({
+                                            url: thisPeer,
+                                            ipAddress: splitPeer[0],
+                                            port: splitPeer[1],
+                                            lastSeen: 0,
+                                            isActive: true,
+                                            lastHeight: 0,
+                                            networkName: globalThis.networkName,
+                                            createdAt: Date.now(),
+                                            updatedAt: Date.now()
+                                        });
+
+                                        logger.info("Found new peer " + thisPeer);
+
+                                    }
+
+                                } catch (e) {
+
 
                                 }
         
@@ -1340,13 +1376,42 @@ console.log("running findPeers");
                             else if (havePeer === 1)
                             {
 
-                                await Peer.updateOne({url: peer}, {$set: {isActive: true, updatedAt: Date.now()}})
+                                try {
+
+                                    let haveActivePeer = await Peer.countDocuments({url: thisPeer, isActive: true});
+
+                                    if (haveActivePeer === 0)
+                                    {
+
+                                        const peerresponse = await axios({
+                                            url: thisPeer + "/name",
+                                            method: 'get',
+                                            responseType: 'json'
+                                        });
+                    
+                                        const data = peerresponse.data;
+
+                                        if (data.networkName == globalThis.networkName)
+                                        {
+
+                                            await Peer.updateOne({url: thisPeer}, {$set: {isActive: true, updatedAt: Date.now()}})
+
+                                            logger.info("Updating peer to active " + thisPeer);
+
+                                        }
+
+                                    }
+
+                                } catch (e) {
+
+
+                                }
 
                             }
                             else if (havePeer > 1)
                             {
                                 // too many records for same peer - reset 
-                                await Peer.deleteMany({url: peer});
+                                await Peer.deleteMany({url: thisPeer});
 
                             }
 
