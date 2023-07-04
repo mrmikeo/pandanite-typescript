@@ -81,6 +81,7 @@ export class WebSocketProcessor {
                 this.ws.send(this.formatReponse(response, message.messageId));
                 break;
             case 'peerNotify':
+console.log("got peerNotify")
                 this.apiSrv.peerNotifyWs(message.hostname, message.port);
                 response = {
                     statusCode: 200,

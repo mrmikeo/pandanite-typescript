@@ -542,7 +542,7 @@ export class ApiController{
 
     }
 
-    public async peerNotifyWs(hostname: string, port: number): Promise<any> { // Ws API
+    public async peerNotifyWs(hostname: string, port: number): Promise<void> { // Ws API
 
         try {
 
