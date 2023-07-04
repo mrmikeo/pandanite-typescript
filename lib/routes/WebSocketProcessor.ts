@@ -80,6 +80,14 @@ export class WebSocketProcessor {
                 };
                 this.ws.send(this.formatReponse(response, message.messageId));
                 break;
+            case 'peerNotify':
+                await this.apiSrv.peerNotifyWs(message.hostname, message.port);
+                response = {
+                    statusCode: 200,
+                    data: "OK"
+                };
+                this.ws.send(this.formatReponse(response, message.messageId));
+                break;
             case 'newBlock':
 
                 this.ws.send(this.formatReponse(response, message.messageId));

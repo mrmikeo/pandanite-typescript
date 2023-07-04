@@ -40,7 +40,6 @@
     "mongoose": "^5.7.5",
     "node-addon-api": "^7.0.0",
     "nodemon": "^2.0.22",
-    "sleep-promise": "^9.1.0",
     "underscore": "^1.13.6",
     "uuid": "^9.0.0",
     "winston": "^3.9.0",

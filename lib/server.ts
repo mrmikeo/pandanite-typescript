@@ -23,6 +23,7 @@ const argv = minimist(process.argv.slice(1));
 
 const PORT = argv.port || 3000;
 
+globalThis.appPort = PORT;
 globalThis.appVersion = '2.0.0';
 globalThis.appName = argv.name || 'Pandanite Node';
 globalThis.networkName = argv.network || 'mainnet';

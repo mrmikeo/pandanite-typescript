@@ -7,7 +7,6 @@ import { Constants } from "./Constants"
 import * as minimist from 'minimist';
 import * as WebSocket from 'ws';
 import { v4 as uuidv4 } from 'uuid';
-import * as sleep from 'sleep-promise';
 
 import { createLogger, format, transports } from 'winston';
 
@@ -254,8 +253,6 @@ class QueueProcessor<T> {
 
         } catch (e) {
 
-console.log("Peer catch " + thisPeer);
-
             that.removeActivePeer(thisPeer);
             delete that.downloadedBlocks[height];
             that.queueProcessor.removeWorker(thisPeer);
@@ -375,121 +372,6 @@ export class PandaniteJobs{
             this.myIpAddress = response.data;
         } catch (e) {}
 
-        // start jobs for syncing peers list & blocks
-/*
-        const workerFunction: Worker<number> = async (thisPeer, height) => {
-
-            try {
-
-                if (this.peerHeights[thisPeer] >= height)
-                {
-                    // has blocks we can download
-
-                    // what version is this peer? can we do ws?
-                    if (this.websocketPeers[thisPeer])
-                    {
-
-                        // get block via websocket
-
-                        const messageId = this.stringToHex(thisPeer) + "." + uuidv4();
-
-                        const message = {
-                            method: 'getBlock',
-                            blockId: height,
-                            messageId: messageId
-                        };
-
-                        this.wsRespFunc[messageId] = (peer: string, messageId: string, data: string) => {
-
-                            try {
-
-                                const jsonparse = JSON.parse(data);
-                                const jsondata = jsonparse.data;
-
-                                if (jsondata && jsondata.hash)
-                                {
-
-                                    this.downloadedBlocks[height] = jsondata;
-                                    delete this.wsRespFunc[messageId];
-
-                                }
-                                else
-                                {
-                                    //const index = this.activePeers.indexOf(thisPeer);
-                                    //if (index > -1) {
-                                    //    this.activePeers.splice(index, index);
-                                    //}
-                                    delete this.downloadedBlocks[height];
-                                    //this.queueProcessor.removeWorker(thisPeer);
-                                    this.queueProcessor.requeue(height);
-                                    delete this.wsRespFunc[messageId];
-                                }
-
-                            } catch (e) {
-
-
-                            }
-
-                        };
-
-                        try {
-                            this.websocketPeers[thisPeer].send(JSON.stringify(message));
-                        } catch (e) {
-                            logger.warn(e);
-                            delete this.wsRespFunc[messageId];
-                            delete this.websocketPeers[thisPeer];
-                        }
-                    }
-                    else
-                    {
-                    
-                        const response = await axios({
-                            url: thisPeer + "/block?blockId=" + height,
-                            method: 'get',
-                            responseType: 'json'
-                        });
-            
-                        const data = response.data;
-            
-                        if (data && data.hash)
-                        {
-                            this.downloadedBlocks[height] = response.data;
-                        }
-                        else
-                        {
-                            delete this.downloadedBlocks[height];
-                            this.queueProcessor.removeWorker(thisPeer);
-                            this.queueProcessor.requeue(height);
-                        }
-
-                    }
-
-                }
-                else
-                {
-
-                    delete this.downloadedBlocks[height];
-                    this.queueProcessor.requeue(height);
-
-                }
-
-            } catch (e) {
-
-console.log("Peer catch " + thisPeer);
-
-                this.removeActivePeer(thisPeer);
-                delete this.downloadedBlocks[height];
-                this.queueProcessor.removeWorker(thisPeer);
-                this.queueProcessor.requeue(height);
-    
-            }
-
-        };
-
-        // Add worker function to the processing queue
-        this.queueProcessor.addFunction(workerFunction);
-*/
-
         const lastDiffHeight = Math.floor(height/Constants.DIFFICULTY_LOOKBACK)*Constants.DIFFICULTY_LOOKBACK;
 
         logger.info("My block height is " + height);
@@ -497,14 +379,18 @@ console.log("Peer catch " + thisPeer);
 
         await this.updateDifficultyForHeight(lastDiffHeight);
 
+        // start jobs for syncing peers list & blocks
+
         //this.checkLocks();
 
         this.checkPeers();
+
         this.findPeers();
 
         this.printPeeringInfo();
 
         this.downloadBlocks();
+
         this.syncBlocks();
 
     }
@@ -1130,6 +1016,26 @@ logger.warn(e);
                             client.on('open', function open() {
 
                                 that.websocketPeers[peer] = client;
+
+                                // peer notify
+                                const messageId2 = that.stringToHex(peer) + "." + uuidv4();
+
+                                const message2 = {
+                                    method: 'peerNofiy',
+                                    hostname: that.myIpAddress,
+                                    port: globalThis.appPort
+                                };
+
+                                try {
+                                    that.websocketPeers[peer].send(JSON.stringify(message2));
+                                } catch (e) {
+                                    // could not send message
+                                }
+
+                            
+
+
+
 
                                 // get stats
 

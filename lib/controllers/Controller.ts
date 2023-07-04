@@ -4,6 +4,7 @@ import { PandaniteCore } from '../core/Core'
 import { Request, Response } from 'express';
 import Big from 'big.js';
 import { Constants} from "../core/Constants"
+import axios from 'axios';
 
 const Transaction = mongoose.model('Transaction', transactionSchema);
 const Address = mongoose.model('Address', addressSchema);
@@ -536,6 +537,60 @@ export class ApiController{
         } catch (e) {
 
             return [];
+
+        }
+
+    }
+
+    public async peerNotifyWs(hostname: string, port: number): Promise<any> { // Ws API
+
+        try {
+
+            const peerUrl = "http://" + hostname + ":" + port;
+
+            let havePeer = await Peer.countDocuments({url: peerUrl});
+
+            if (havePeer === 0)
+            {
+
+                try {
+
+                    const peerresponse = await axios({
+                        url: peerUrl + "/name",
+                        method: 'get',
+                        responseType: 'json'
+                    });
+
+                    const data = peerresponse.data;
+
+                    if (data.networkName == globalThis.networkName)
+                    {
+
+                        await Peer.create({
+                            url: peerUrl,
+                            ipAddress: hostname,
+                            port: port,
+                            lastSeen: 0,
+                            isActive: true,
+                            lastHeight: 0,
+                            networkName: globalThis.networkName,
+                            createdAt: Date.now(),
+                            updatedAt: Date.now()
+                        });
+
+                    }
+
+                } catch (e) {
+
+
+                }
+
+            }
+
+
+        } catch (e) {
+
+
 
         }
 
