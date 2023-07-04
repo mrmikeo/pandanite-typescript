@@ -968,8 +968,6 @@ console.log("Peer catch " + thisPeer);
 
         if (globalThis.shuttingDown === true) return false;
 
-        console.log("start checkPeers");
-
         this.checkingPeers = true;
         this.checkPeerLock = Date.now();
         
@@ -1411,8 +1409,6 @@ logger.warn(e);
         this.checkingPeers = false;
         this.checkPeerLock = 0;
 
-        console.log("end checkPeers");
-
         setTimeout(() => {
             this.checkPeers();
         },30000);
@@ -1424,8 +1420,6 @@ logger.warn(e);
     public async findPeers()  {
 
         if (globalThis.shuttingDown === true) return false;
-
-        console.log("start findPeers");
 
         this.findingPeers = true;
         this.findPeerLock = Date.now();
@@ -1550,8 +1544,6 @@ logger.warn(e);
         this.findingPeers = false;
         this.findPeerLock = 0;
 
-        console.log("end findPeers");
-
         setTimeout(() => {
             this.findPeers();
         },60000);
@@ -1563,8 +1555,6 @@ logger.warn(e);
     public async downloadBlocks()  {
 
         if (globalThis.shuttingDown === true) return false;
-
-        console.log("start downloadblocks");
 
         this.downloadingBlocks = true;
 
@@ -1614,8 +1604,6 @@ logger.warn(e);
 
         }
 
-        console.log("end downloadblocks");
-
         setTimeout(() => {
             this.downloadBlocks();
         },1000);
@@ -1626,8 +1614,6 @@ logger.warn(e);
     public async syncBlocks()  {
 
         if (globalThis.shuttingDown === true) return false;
-
-        console.log("start syncblocks");
 
         globalThis.safeToShutDown = false;
         this.syncingBlocks = true;
@@ -1665,7 +1651,6 @@ logger.warn(e);
                         delete this.downloadedBlocks[i];
                     } catch (e) {
 logger.warn(e);
-console.log(e);
                         delete this.downloadedBlocks[i];
                         this.queueProcessor.requeue(i);
                         const previousHeight = i - 1;
@@ -1686,8 +1671,6 @@ console.log(e);
         globalThis.safeToShutDown = true;
         this.syncingBlocks = false;
         this.syncBlocksLock = 0;
-
-        console.log("end syncblocks");
 
         setTimeout(() => {
             this.syncBlocks();
