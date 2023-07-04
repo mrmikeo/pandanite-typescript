@@ -391,27 +391,29 @@ console.log("Peer catch " + thisPeer);
         var that = this;
 
         // Interval jobs
-        setInterval(function() {
-            if (!that.checkingPeers && globalThis.shuttingDown == false)
+        let interval1 = setInterval(() => {
+            console.log("interval1");
+            if (this.checkingPeers === false && globalThis.shuttingDown === false)
             {
-                that.checkPeers();
+                this.checkPeers();
             }
-            if (!that.findingPeers && globalThis.shuttingDown == false)
+            if (this.findingPeers === false && globalThis.shuttingDown === false)
             {
-                that.findPeers();
+                this.findPeers();
             }
-            that.checkLocks();
-            that.printPeeringInfo();
+            this.checkLocks();
+            this.printPeeringInfo();
         }, 20000);
 
-        setInterval(function() {
-            if (!that.downloadingBlocks)
+        let interval2 = setInterval(() => {
+            console.log("interval2");
+            if (this.downloadingBlocks === false)
             {
-                that.downloadBlocks();
+                this.downloadBlocks();
             }
-            if (!that.syncingBlocks && globalThis.shuttingDown == false)
+            if (this.syncingBlocks === false && globalThis.shuttingDown === false)
             {
-                that.syncBlocks();
+                this.syncBlocks();
             }
         }, 1000);
 
