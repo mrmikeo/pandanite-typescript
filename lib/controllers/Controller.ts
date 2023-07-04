@@ -76,9 +76,10 @@ export class ApiController{
 
         try {
 
-            let blockcount = await Block.countDocuments(); 
+            const findLastBlock = await Block.find().sort({height: -1}).limit(1);
+            const lastBlock = findLastBlock[0] || {};
 
-            res.json(blockcount);
+            res.json(lastBlock.height || 0);
 
         } catch (e) {
 
@@ -546,52 +547,56 @@ export class ApiController{
 
         try {
 
+            // A v2 peer has connected to us, lets see if we can connect to them
+
             const peerUrl = "http://" + hostname + ":" + port;
 
-            const peerresponse = await axios({
-                url: peerUrl + "/name",
-                method: 'get',
-                responseType: 'json'
-            });
+            const havePeer = await Peer.findOne({url: peerUrl});
 
-            const data = peerresponse.data;
-
-            if (data.networkName == globalThis.networkName)
+            if (!havePeer || havePeer.isActive === false)
             {
 
-                let havePeer = await Peer.countDocuments({url: peerUrl});
+                const peerresponse = await axios({
+                    url: peerUrl + "/name",
+                    method: 'get',
+                    responseType: 'json'
+                });
 
-                if (havePeer === 0)
+                const data = peerresponse.data;
+
+                if (data.networkName == globalThis.networkName)
                 {
 
-                    await Peer.create({
-                        url: peerUrl,
-                        ipAddress: hostname,
-                        port: port,
-                        lastSeen: 0,
-                        isActive: true,
-                        lastHeight: 0,
-                        networkName: globalThis.networkName,
-                        createdAt: Date.now(),
-                        updatedAt: Date.now()
-                    });
+                    if (!havePeer)
+                    {
+
+                        await Peer.create({
+                            url: peerUrl,
+                            ipAddress: hostname,
+                            port: port,
+                            lastSeen: 0,
+                            isActive: true,
+                            lastHeight: 0,
+                            networkName: globalThis.networkName,
+                            createdAt: Date.now(),
+                            updatedAt: Date.now()
+                        });
+
+                    }
+                    else if (havePeer.isActive === false)
+                    {
+
+                        await Peer.updateMany({url: peerUrl}, {$set: {isActive: true, updatedAt: Date.now()}});
+
+                    }
 
                 }
-                else
-                {
-
-                    await Peer.updateMany({url: peerUrl}, {$set: {isActive: true, updatedAt: Date.now()}});
-
-                }
-
-                console.log("received notification from new peer: " + peerUrl)
 
             }
 
-
         } catch (e) {
 
-console.log(e);
+            // can not connect
 
         }
 
@@ -1053,7 +1058,7 @@ console.log(peerInfo);
 
     public createWallet (req: Request, res: Response) { 
 
-        let newWallet;
+        let newWallet: any;
 
         if (req.query.password)
         {

@@ -1650,375 +1650,379 @@ logger.warn(e);
 
     }
 
-    private async importBlock(block: any) {
+    private async importBlock(block: any): Promise<any> {
 
-        const lastBlock = await Block.findOne({height: this.myBlockHeight});
+        return new Promise<any>(async (resolve, reject) => {
 
-        let lastHeight = 0;
-        let isValid = false;
-        let blockReward = 0;
+            const lastBlock = await Block.findOne({height: this.myBlockHeight});
 
-        if (lastBlock)
-        {
-            lastHeight = lastBlock.height;
-            let expectedHeight = lastHeight + 1;
-
-            if (block.id != expectedHeight)
-            {
-                throw new Error('Invalid Block. Unexpected Height');
-            }
-
-            let medianTimestamp = 0;
-            if (this.myBlockHeight > 10) {
-                const times: Array<number> = [];
-
-                // get last 10 blocktimes
-                const tenBlocks = await Block.find({height: {$gt: this.myBlockHeight - 10}}).sort({height: -1});
-                for (let i = 0; i < tenBlocks.length; i++) {
-                  times.push(parseInt(tenBlocks[i].timestamp));
-                }
-                times.sort((a, b) => a - b);
-
-                // compute median
-                if (times.length % 2 === 0) {
-                    medianTimestamp = (times[Math.floor(times.length / 2)] + times[Math.floor(times.length / 2) - 1]) / 2;
-                } else {
-                    medianTimestamp = times[Math.floor(times.length / 2)];
-                }
-            
-            }
-
-            let networkTimestamp = Math.round(Date.now()/1000);
-
-            // fix for transactions ordering, as generate transaction should always be first when doing the balance checks
-            block.transactions.sort((a, b) => {
-                return a.from < b.from ? -1 : 1;
-            });
-
-            blockReward = block.transactions[0].amount;
-
-            try {
-                isValid = await PandaniteCore.checkBlockValid(block, lastBlock.blockHash, lastBlock.height, this.difficulty, networkTimestamp, medianTimestamp, blockReward);
-            } catch (e) {
-                logger.warn(e);
-                throw new Error(e);
-            }
-
-            // Poor previous design requires this in order to sync :(
-            const excludedTransactions = [
-
-            ];
-
-            let pendingAmounts = {};
-
-            // Check Balances - excluded for block height < 500,000 as there are a few transactions that do not pass this test
-            if (block.id > 510000)
-            for (let i = 0; i < block.transactions.length; i++)
-            {
-                const thisTrx = block.transactions[i];
-
-                let tokenKey = thisTrx.token?thisTrx.token.toUpperCase():'native';
-
-                let pendingKey = `${thisTrx.to.toUpperCase()}:${tokenKey}`;
-
-                pendingAmounts[pendingKey] = thisTrx.amount;
-
-                if (!excludedTransactions.includes(thisTrx.txid.toUpperCase()) && thisTrx.from && thisTrx.from != "00000000000000000000000000000000000000000000000000")
-                {
-                    if (!thisTrx.type || thisTrx.type === 0)
-                    {
-                        // standard transfer
-
-                        // get address balance
-                        const balanceInfo = await Balance.findOne({addressString: thisTrx.from.toUpperCase(), token: null});
-
-                        let nativependingKey = `${thisTrx.from.toUpperCase()}:native`;
-
-                        if (!balanceInfo && !pendingAmounts[nativependingKey])
-                        {
-                            logger.warn("Transaction Missing Account Balance " + thisTrx.txid + " Address: " +  thisTrx.from.toUpperCase());
-                            isValid = false;
-                            break;
-                        }
-                        else if (!balanceInfo)
-                        {
-                            const pendingAmount = pendingAmounts[nativependingKey] || 0;
-
-                            const totalTxAmount = Big(thisTrx.amount).plus(thisTrx.fee).toFixed();
-
-                            if (Big(totalTxAmount).gt(pendingAmount))
-                            {
-                                logger.warn("Transaction Amount Exceeds Account Balance " + thisTrx.txid + " Value: " + totalTxAmount + " >  Balance: " + pendingAmount);
-                                isValid = false;
-                                break;
-                            }
-                        }
-                        else
-                        {
-
-                            const pendingAmount = pendingAmounts[nativependingKey] || 0;
-
-                            const totalTxAmount = Big(thisTrx.amount).plus(thisTrx.fee).toFixed();
-
-                            const totalAvailable = Big(balanceInfo.balance).plus(pendingAmount);
-
-                            if (Big(totalTxAmount).gt(totalAvailable))
-                            {
-                                logger.warn("Transaction Amount Exceeds Account Balance " + thisTrx.txid + " Value: " + totalTxAmount + " >  Balance: " + balanceInfo.balance + " + Pending Balance: " + pendingAmount);
-                                isValid = false;
-                                break;
-                            }
-                        }
-                    }
-                    else if (thisTrx.type === 1)
-                    {
-                        // token transfer
-
-                        if (!thisTrx.token) {
-                            isValid = false;
-                            break;
-                        }
-
-                        const tokenInfo = await Token.findOne({tokenId: thisTrx.token.toUpperCase()});
-
-                        if (!tokenInfo) {
-                            isValid = false;
-                            break;
-                        }
-
-                        let nativependingKey = `${thisTrx.from.toUpperCase()}:native`;
-                        let tokenKey = thisTrx.token.toUpperCase();
-                        let tokenpendingKey = `${thisTrx.from.toUpperCase()}:${tokenKey}`;
-
-                        // get address native balance
-                        let balanceInfo = await Balance.findOne({addressString: thisTrx.from.toUpperCase(), token: null});
-
-                        if (!balanceInfo && !pendingAmounts[nativependingKey])
-                        {
-                            logger.warn("Transaction Missing Account Balance " + thisTrx.txid + " Address: " +  thisTrx.from.toUpperCase());
-                            isValid = false;
-                            break;
-                        }
-                        else if (!balanceInfo)
-                        {
-                            balanceInfo = {balance: pendingAmounts[nativependingKey]};
-                        }
-                        else if (pendingAmounts[nativependingKey])
-                        {
-                            balanceInfo.balance = balanceInfo.balance + pendingAmounts[nativependingKey];
-                        }
-                        
-                        // get address token balance
-                        let tokenBalanceInfo = await Balance.findOne({addressString: thisTrx.from.toUpperCase(), token: tokenInfo._id});
-
-
-                        if (!tokenBalanceInfo && !pendingAmounts[tokenpendingKey])
-                        {
-                            logger.warn("Transaction Missing Token Account Balance " + thisTrx.txid + " Address: " +  thisTrx.from.toUpperCase());
-                            isValid = false;
-                            break;
-                        }
-                        else if (!tokenBalanceInfo)
-                        {
-                            tokenBalanceInfo = {balance: pendingAmounts[tokenpendingKey]};
-                        }
-                        else if (pendingAmounts[tokenpendingKey])
-                        {
-                            balanceInfo.balance = balanceInfo.balance + pendingAmounts[tokenpendingKey];
-                        }
-
-                        if (!balanceInfo || !tokenBalanceInfo) 
-                        {
-                            isValid = false;
-                            break;
-                        }
-                        else
-                        {
-                            const txFeeAmount = Big(thisTrx.fee).toFixed();
-
-                            if (Big(txFeeAmount).gt(balanceInfo.balance))
-                            {
-                                logger.warn("Transaction Amount Exceeds Account Native Balance " + thisTrx.txid + " FeeValue: " + txFeeAmount + " >  Balance: " + balanceInfo.balance);
-                                isValid = false;
-                                break;
-                            }
-
-                            const tokenAmount = Big(thisTrx.tokenAmount).toFixed();
-
-                            if (Big(tokenAmount).gt(tokenBalanceInfo.balance))
-                            {
-                                logger.warn("Transaction Amount Exceeds Account Token Balance " + thisTrx.txid + " Value: " + tokenAmount + " >  Balance: " + tokenBalanceInfo.balance);
-                                isValid = false;
-                                break;
-                            }
-
-                        }
-                    }
-                }
-            }
-
-        }
-        else if (block.id === 1)
-        {
-
-            let medianTimestamp = 0;
-            let networkTimestamp = Math.round(Date.now()/1000);
-
-            try {
-                isValid = await PandaniteCore.checkBlockValid(block, "0000000000000000000000000000000000000000000000000000000000000000", 0, this.difficulty, networkTimestamp, medianTimestamp, 0);
-            } catch (e) {
-                logger.warn(e);
-                throw new Error(e);
-            }
-
-        }
-
-        if (isValid === true)
-        {
-
-            let previousTotalWork = Big(0).toFixed();
+            let lastHeight = 0;
+            let isValid = false;
+            let blockReward = 0;
 
             if (lastBlock)
             {
-                previousTotalWork= lastBlock.totalWork
+                lastHeight = lastBlock.height;
+                let expectedHeight = lastHeight + 1;
+
+                if (block.id != expectedHeight)
+                {
+                    reject('Invalid Block. Unexpected Height');
+                }
+
+                let medianTimestamp = 0;
+                if (this.myBlockHeight > 10) {
+                    const times: Array<number> = [];
+
+                    // get last 10 blocktimes
+                    const tenBlocks = await Block.find({height: {$gt: this.myBlockHeight - 10}}).sort({height: -1});
+                    for (let i = 0; i < tenBlocks.length; i++) {
+                    times.push(parseInt(tenBlocks[i].timestamp));
+                    }
+                    times.sort((a, b) => a - b);
+
+                    // compute median
+                    if (times.length % 2 === 0) {
+                        medianTimestamp = (times[Math.floor(times.length / 2)] + times[Math.floor(times.length / 2) - 1]) / 2;
+                    } else {
+                        medianTimestamp = times[Math.floor(times.length / 2)];
+                    }
+                
+                }
+
+                let networkTimestamp = Math.round(Date.now()/1000);
+
+                // fix for transactions ordering, as generate transaction should always be first when doing the balance checks
+                block.transactions.sort((a, b) => {
+                    return a.from < b.from ? -1 : 1;
+                });
+
+                blockReward = block.transactions[0].amount;
+
+                try {
+                    isValid = await PandaniteCore.checkBlockValid(block, lastBlock.blockHash, lastBlock.height, this.difficulty, networkTimestamp, medianTimestamp, blockReward);
+                } catch (e) {
+                    logger.warn(e);
+                    reject(e);
+                }
+
+                // Poor previous design requires this in order to sync :(
+                const excludedTransactions = [
+
+                ];
+
+                let pendingAmounts = {};
+
+                // Check Balances - excluded for block height < 500,000 as there are a few transactions that do not pass this test
+                if (block.id > 510000)
+                for (let i = 0; i < block.transactions.length; i++)
+                {
+                    const thisTrx = block.transactions[i];
+
+                    let tokenKey = thisTrx.token?thisTrx.token.toUpperCase():'native';
+
+                    let pendingKey = `${thisTrx.to.toUpperCase()}:${tokenKey}`;
+
+                    pendingAmounts[pendingKey] = thisTrx.amount;
+
+                    if (!excludedTransactions.includes(thisTrx.txid.toUpperCase()) && thisTrx.from && thisTrx.from != "00000000000000000000000000000000000000000000000000")
+                    {
+                        if (!thisTrx.type || thisTrx.type === 0)
+                        {
+                            // standard transfer
+
+                            // get address balance
+                            const balanceInfo = await Balance.findOne({addressString: thisTrx.from.toUpperCase(), token: null});
+
+                            let nativependingKey = `${thisTrx.from.toUpperCase()}:native`;
+
+                            if (!balanceInfo && !pendingAmounts[nativependingKey])
+                            {
+                                logger.warn("Transaction Missing Account Balance " + thisTrx.txid + " Address: " +  thisTrx.from.toUpperCase());
+                                isValid = false;
+                                break;
+                            }
+                            else if (!balanceInfo)
+                            {
+                                const pendingAmount = pendingAmounts[nativependingKey] || 0;
+
+                                const totalTxAmount = Big(thisTrx.amount).plus(thisTrx.fee).toFixed();
+
+                                if (Big(totalTxAmount).gt(pendingAmount))
+                                {
+                                    logger.warn("Transaction Amount Exceeds Account Balance " + thisTrx.txid + " Value: " + totalTxAmount + " >  Balance: " + pendingAmount);
+                                    isValid = false;
+                                    break;
+                                }
+                            }
+                            else
+                            {
+
+                                const pendingAmount = pendingAmounts[nativependingKey] || 0;
+
+                                const totalTxAmount = Big(thisTrx.amount).plus(thisTrx.fee).toFixed();
+
+                                const totalAvailable = Big(balanceInfo.balance).plus(pendingAmount);
+
+                                if (Big(totalTxAmount).gt(totalAvailable))
+                                {
+                                    logger.warn("Transaction Amount Exceeds Account Balance " + thisTrx.txid + " Value: " + totalTxAmount + " >  Balance: " + balanceInfo.balance + " + Pending Balance: " + pendingAmount);
+                                    isValid = false;
+                                    break;
+                                }
+                            }
+                        }
+                        else if (thisTrx.type === 1)
+                        {
+                            // token transfer
+
+                            if (!thisTrx.token) {
+                                isValid = false;
+                                break;
+                            }
+
+                            const tokenInfo = await Token.findOne({tokenId: thisTrx.token.toUpperCase()});
+
+                            if (!tokenInfo) {
+                                isValid = false;
+                                break;
+                            }
+
+                            let nativependingKey = `${thisTrx.from.toUpperCase()}:native`;
+                            let tokenKey = thisTrx.token.toUpperCase();
+                            let tokenpendingKey = `${thisTrx.from.toUpperCase()}:${tokenKey}`;
+
+                            // get address native balance
+                            let balanceInfo = await Balance.findOne({addressString: thisTrx.from.toUpperCase(), token: null});
+
+                            if (!balanceInfo && !pendingAmounts[nativependingKey])
+                            {
+                                logger.warn("Transaction Missing Account Balance " + thisTrx.txid + " Address: " +  thisTrx.from.toUpperCase());
+                                isValid = false;
+                                break;
+                            }
+                            else if (!balanceInfo)
+                            {
+                                balanceInfo = {balance: pendingAmounts[nativependingKey]};
+                            }
+                            else if (pendingAmounts[nativependingKey])
+                            {
+                                balanceInfo.balance = balanceInfo.balance + pendingAmounts[nativependingKey];
+                            }
+                            
+                            // get address token balance
+                            let tokenBalanceInfo = await Balance.findOne({addressString: thisTrx.from.toUpperCase(), token: tokenInfo._id});
+
+
+                            if (!tokenBalanceInfo && !pendingAmounts[tokenpendingKey])
+                            {
+                                logger.warn("Transaction Missing Token Account Balance " + thisTrx.txid + " Address: " +  thisTrx.from.toUpperCase());
+                                isValid = false;
+                                break;
+                            }
+                            else if (!tokenBalanceInfo)
+                            {
+                                tokenBalanceInfo = {balance: pendingAmounts[tokenpendingKey]};
+                            }
+                            else if (pendingAmounts[tokenpendingKey])
+                            {
+                                balanceInfo.balance = balanceInfo.balance + pendingAmounts[tokenpendingKey];
+                            }
+
+                            if (!balanceInfo || !tokenBalanceInfo) 
+                            {
+                                isValid = false;
+                                break;
+                            }
+                            else
+                            {
+                                const txFeeAmount = Big(thisTrx.fee).toFixed();
+
+                                if (Big(txFeeAmount).gt(balanceInfo.balance))
+                                {
+                                    logger.warn("Transaction Amount Exceeds Account Native Balance " + thisTrx.txid + " FeeValue: " + txFeeAmount + " >  Balance: " + balanceInfo.balance);
+                                    isValid = false;
+                                    break;
+                                }
+
+                                const tokenAmount = Big(thisTrx.tokenAmount).toFixed();
+
+                                if (Big(tokenAmount).gt(tokenBalanceInfo.balance))
+                                {
+                                    logger.warn("Transaction Amount Exceeds Account Token Balance " + thisTrx.txid + " Value: " + tokenAmount + " >  Balance: " + tokenBalanceInfo.balance);
+                                    isValid = false;
+                                    break;
+                                }
+
+                            }
+                        }
+                    }
+                }
+
             }
-
-            const totalWork = Big(previousTotalWork).plus(block.difficulty).toFixed(0);
-
-            // add block to db
-
-            const newBlock = {
-                nonce: block.nonce.toUpperCase(),
-                height: block.id,
-                totalWork: totalWork,
-                difficulty: block.difficulty,
-                timestamp: block.timestamp,
-                merkleRoot: block.merkleRoot.toUpperCase(),
-                blockHash: block.hash.toUpperCase(),
-                lastBlockHash: block.lastBlockHash.toUpperCase(),
-                transactions: [],
-                blockReward: blockReward,
-                createdAt: Date.now(),
-                updatedAt: Date.now()
-            };
-
-            const blockInfo = await Block.create(newBlock);
-
-            let blockTx = [];
-
-            for (let i = 0; i < block.transactions.length; i++)
+            else if (block.id === 1)
             {
 
-                const thisTx = block.transactions[i];
+                let medianTimestamp = 0;
+                let networkTimestamp = Math.round(Date.now()/1000);
 
-                let tokenInfo = null;
-                if (thisTx.token)
-                {
-                    tokenInfo = await Token.findOne({transaction: thisTx.token.toUpperCase()});
-                }
-
-                let tokenId = null;
-                if (tokenInfo)
-                {
-                    tokenId = tokenInfo._id;
-                }
-
-                let toAddress = await Address.findOne({address: thisTx.to.toUpperCase()});
-                let fromAddress = await Address.findOne({address: thisTx.from.toUpperCase()});
-
-                if (!toAddress)
-                {
-                    toAddress = await Address.create({
-                        address: thisTx.to.toUpperCase(),
-                        publicKey: "",
-                        createdAt: Date.now(),
-                        updatedAt: Date.now()
-                    });
-                }
-
-                if (!fromAddress)
-                {
-                    fromAddress = await Address.create({
-                        address: thisTx.from.toUpperCase(),
-                        publicKey: thisTx.signingKey?thisTx.signingKey.toUpperCase():"",
-                        createdAt: Date.now(),
-                        updatedAt: Date.now()
-                    });
-                }
-                else if ((!fromAddress.publicKey || fromAddress.publicKey == "") && thisTx.signingKey)
-                {
-                    await Address.updateOne({_id: fromAddress._id}, {$set: {publicKey: thisTx.signingKey.toUpperCase()}});
-                }
-
-                const transactionAmount: number = thisTx.token?thisTx.tokenAmount:thisTx.amount;
-
-                const newTransaction = {
-                    type: thisTx.type || 0,
-                    toAddress: toAddress._id,
-                    fromAddress: fromAddress._id,
-                    signature: thisTx.signature?thisTx.signature.toUpperCase():null,
-                    hash: thisTx.txid.toUpperCase(),
-                    amount: transactionAmount,
-                    token: tokenId,
-                    fee: thisTx.fee,
-                    isGenerate: thisTx.from===""?true:false,
-                    nonce: thisTx.timestamp,
-                    signingKey: thisTx.signingKey?thisTx.signingKey.toUpperCase():null,
-                    block: blockInfo._id,
-                    blockIndex: i,
-                    createdAt: Date.now(),
-                    updatedAt: Date.now()
-                }
-
-                const newTx = await Transaction.create(newTransaction);
-
-                await Mempool.deleteMany({hash: thisTx.txid});
-
-                blockTx.push(newTx._id);
-
-                if (thisTx.from !== "00000000000000000000000000000000000000000000000000" && thisTx.from !== "")
-                {
-                    const deductionAmount = Number(Big(transactionAmount).plus(thisTx.fee).times(-1).toFixed(0));
-                    await Balance.updateOne({address: fromAddress._id, token: tokenId}, {$inc: {balance: deductionAmount}});
-                }
-
-                const haveToBalance = await Balance.findOne({address: toAddress._id, token: tokenId});
-
-                if (!haveToBalance)
-                {
-                    await Balance.create({
-                        address: toAddress._id,
-                        token: tokenId,
-                        addressString: thisTx.to.toUpperCase(),
-                        tokenString: thisTx.token?.toUpperCase(),
-                        balance: thisTx.amount,
-                        createdAt: Date.now(),
-                        updatedAt: Date.now()
-                    });
-
-                }
-                else
-                {
-                    await Balance.updateOne({address: toAddress._id, token: tokenId}, {$inc: {balance: transactionAmount}});
+                try {
+                    isValid = await PandaniteCore.checkBlockValid(block, "0000000000000000000000000000000000000000000000000000000000000000", 0, this.difficulty, networkTimestamp, medianTimestamp, 0);
+                } catch (e) {
+                    logger.warn(e);
+                    reject(e);
                 }
 
             }
 
-            await Block.updateOne({_id: blockInfo._id}, {$set: {transactions: blockTx}});
+            if (isValid === true)
+            {
 
-            this.myBlockHeight = block.id;
+                let previousTotalWork = Big(0).toFixed();
 
-            await this.updateDifficulty();
+                if (lastBlock)
+                {
+                    previousTotalWork= lastBlock.totalWork
+                }
 
-            logger.info("Imported Block #" + block.id);
+                const totalWork = Big(previousTotalWork).plus(block.difficulty).toFixed(0);
 
-            return true;
+                // add block to db
 
-        }
-        else
-        {
-            throw new Error('Invalid Block.');
-        }
+                const newBlock = {
+                    nonce: block.nonce.toUpperCase(),
+                    height: block.id,
+                    totalWork: totalWork,
+                    difficulty: block.difficulty,
+                    timestamp: block.timestamp,
+                    merkleRoot: block.merkleRoot.toUpperCase(),
+                    blockHash: block.hash.toUpperCase(),
+                    lastBlockHash: block.lastBlockHash.toUpperCase(),
+                    transactions: [],
+                    blockReward: blockReward,
+                    createdAt: Date.now(),
+                    updatedAt: Date.now()
+                };
+
+                const blockInfo = await Block.create(newBlock);
+
+                let blockTx = [];
+
+                for (let i = 0; i < block.transactions.length; i++)
+                {
+
+                    const thisTx = block.transactions[i];
+
+                    let tokenInfo = null;
+                    if (thisTx.token)
+                    {
+                        tokenInfo = await Token.findOne({transaction: thisTx.token.toUpperCase()});
+                    }
+
+                    let tokenId = null;
+                    if (tokenInfo)
+                    {
+                        tokenId = tokenInfo._id;
+                    }
+
+                    let toAddress = await Address.findOne({address: thisTx.to.toUpperCase()});
+                    let fromAddress = await Address.findOne({address: thisTx.from.toUpperCase()});
+
+                    if (!toAddress)
+                    {
+                        toAddress = await Address.create({
+                            address: thisTx.to.toUpperCase(),
+                            publicKey: "",
+                            createdAt: Date.now(),
+                            updatedAt: Date.now()
+                        });
+                    }
+
+                    if (!fromAddress)
+                    {
+                        fromAddress = await Address.create({
+                            address: thisTx.from.toUpperCase(),
+                            publicKey: thisTx.signingKey?thisTx.signingKey.toUpperCase():"",
+                            createdAt: Date.now(),
+                            updatedAt: Date.now()
+                        });
+                    }
+                    else if ((!fromAddress.publicKey || fromAddress.publicKey == "") && thisTx.signingKey)
+                    {
+                        await Address.updateOne({_id: fromAddress._id}, {$set: {publicKey: thisTx.signingKey.toUpperCase()}});
+                    }
+
+                    const transactionAmount: number = thisTx.token?thisTx.tokenAmount:thisTx.amount;
+
+                    const newTransaction = {
+                        type: thisTx.type || 0,
+                        toAddress: toAddress._id,
+                        fromAddress: fromAddress._id,
+                        signature: thisTx.signature?thisTx.signature.toUpperCase():null,
+                        hash: thisTx.txid.toUpperCase(),
+                        amount: transactionAmount,
+                        token: tokenId,
+                        fee: thisTx.fee,
+                        isGenerate: thisTx.from===""?true:false,
+                        nonce: thisTx.timestamp,
+                        signingKey: thisTx.signingKey?thisTx.signingKey.toUpperCase():null,
+                        block: blockInfo._id,
+                        blockIndex: i,
+                        createdAt: Date.now(),
+                        updatedAt: Date.now()
+                    }
+
+                    const newTx = await Transaction.create(newTransaction);
+
+                    await Mempool.deleteMany({hash: thisTx.txid});
+
+                    blockTx.push(newTx._id);
+
+                    if (thisTx.from !== "00000000000000000000000000000000000000000000000000" && thisTx.from !== "")
+                    {
+                        const deductionAmount = Number(Big(transactionAmount).plus(thisTx.fee).times(-1).toFixed(0));
+                        await Balance.updateOne({address: fromAddress._id, token: tokenId}, {$inc: {balance: deductionAmount}});
+                    }
+
+                    const haveToBalance = await Balance.findOne({address: toAddress._id, token: tokenId});
+
+                    if (!haveToBalance)
+                    {
+                        await Balance.create({
+                            address: toAddress._id,
+                            token: tokenId,
+                            addressString: thisTx.to.toUpperCase(),
+                            tokenString: thisTx.token?.toUpperCase(),
+                            balance: thisTx.amount,
+                            createdAt: Date.now(),
+                            updatedAt: Date.now()
+                        });
+
+                    }
+                    else
+                    {
+                        await Balance.updateOne({address: toAddress._id, token: tokenId}, {$inc: {balance: transactionAmount}});
+                    }
+
+                }
+
+                await Block.updateOne({_id: blockInfo._id}, {$set: {transactions: blockTx}});
+
+                this.myBlockHeight = block.id;
+
+                await this.updateDifficulty();
+
+                logger.info("Imported Block #" + block.id);
+
+                resolve(true);
+
+            }
+            else
+            {
+                reject('Invalid Block.');
+            }
+
+        });
 
     }
 
