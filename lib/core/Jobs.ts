@@ -1124,11 +1124,18 @@ logger.warn(e);
                                 }
                             });
 
-                            client.on('close', function close() {
+                            client.on('close', async function close() {
 
                                 logger.warn('Websocket disconnected from peer: ' + peer);
 
                                 delete that.websocketPeers[peer];
+
+                                const index = that.activePeers.indexOf(peer);
+                                if (index > -1) {
+                                    that.activePeers.splice(index, 1)
+                                }
+
+                                await Peer.updateOne({url: peer}, {$set: {isActive: false, updatedAt: Date.now()}});
 
                                 // cleanup any open respfunc
                                 const peerHex = that.stringToHex(peer);
