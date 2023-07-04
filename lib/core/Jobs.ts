@@ -387,24 +387,12 @@ console.log("Peer catch " + thisPeer);
 
         await this.updateDifficultyForHeight(lastDiffHeight);
 
+        //this.checkLocks();
+
         this.checkPeers();
+        this.findPeers();
 
-        var that = this;
-
-        // Interval jobs
-        let interval1 = setInterval(() => {
-            console.log("interval1");
-            if (this.checkingPeers === false && globalThis.shuttingDown === false)
-            {
-                this.checkPeers();
-            }
-            if (this.findingPeers === false && globalThis.shuttingDown === false)
-            {
-                this.findPeers();
-            }
-            this.checkLocks();
-            this.printPeeringInfo();
-        }, 20000);
+        this.printPeeringInfo();
 
         this.downloadBlocks();
         this.syncBlocks();
@@ -858,11 +846,15 @@ console.log("Peer catch " + thisPeer);
 
         logger.info("-----------------------------------");
 
+        await sleep(30000);
+        this.printPeeringInfo();
         return true;
 
     }
 
     public async checkPeers()  {
+
+        if (globalThis.shuttingDown === true) return false;
 
         this.checkingPeers = true;
         this.checkPeerLock = Date.now();
@@ -1305,12 +1297,16 @@ logger.warn(e);
         this.checkingPeers = false;
         this.checkPeerLock = 0;
 
+        await sleep(20000);
+        this.checkPeers();
         return true;
 
     }
 
     public async findPeers()  {
 
+        if (globalThis.shuttingDown === true) return false;
+        
         this.findingPeers = true;
         this.findPeerLock = Date.now();
 
@@ -1434,11 +1430,15 @@ logger.warn(e);
         this.findingPeers = false;
         this.findPeerLock = 0;
 
+        await sleep(60000);
+        this.findPeers();
         return true;
 
     }
 
     public async downloadBlocks()  {
+
+        if (globalThis.shuttingDown === true) return false;
 
         console.log("start downloadblocks");
 
@@ -1493,9 +1493,12 @@ logger.warn(e);
         console.log("end downloadblocks");
         await sleep(1000);
         this.downloadBlocks();
+        return true;
     }
 
     public async syncBlocks()  {
+
+        if (globalThis.shuttingDown === true) return false;
 
         console.log("start syncblocks");
 
@@ -1562,6 +1565,7 @@ logger.warn(e);
 
         await sleep(1000);
         this.syncBlocks();
+        return true;
 
     }
 
