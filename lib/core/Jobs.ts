@@ -1446,6 +1446,8 @@ logger.warn(e);
 
     public async downloadBlocks()  {
 
+        console.log("start downloadblocks");
+
         this.downloadingBlocks = true;
 
         let start = this.myBlockHeight + 1;
@@ -1466,6 +1468,7 @@ logger.warn(e);
         if (start > end)
         {
             this.downloadingBlocks = false;
+            console.log("end downloadblocks");
             return true;
         }
         else
@@ -1492,7 +1495,7 @@ logger.warn(e);
             }
 
             this.downloadingBlocks = false;
-
+            console.log("end downloadblocks");
             return true;
         }
     }
