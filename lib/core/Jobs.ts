@@ -1499,6 +1499,8 @@ logger.warn(e);
 
     public async syncBlocks()  {
 
+        console.log("start syncblocks");
+
         globalThis.safeToShutDown = false;
         this.syncingBlocks = true;
         this.syncBlocksLock = Date.now();
@@ -1557,6 +1559,8 @@ logger.warn(e);
         globalThis.safeToShutDown = true;
         this.syncingBlocks = false;
         this.syncBlocksLock = 0;
+
+        console.log("end syncblocks");
 
         return true;
 
