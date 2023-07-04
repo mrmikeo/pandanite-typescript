@@ -591,7 +591,7 @@ export class ApiController{
 
         } catch (e) {
 
-
+console.log(e);
 
         }
 

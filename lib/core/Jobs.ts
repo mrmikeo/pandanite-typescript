@@ -1021,7 +1021,7 @@ logger.warn(e);
                                 const messageId2 = that.stringToHex(peer) + "." + uuidv4();
 
                                 const message2 = {
-                                    method: 'peerNofiy',
+                                    method: 'peerNotify',
                                     hostname: that.myIpAddress,
                                     port: globalThis.appPort
                                 };
