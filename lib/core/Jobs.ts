@@ -1493,12 +1493,22 @@ logger.warn(e);
 
         let dlBlockKeys = Object.keys(this.downloadedBlocks);
 
-        if (dlBlockKeys.length > 0)
+        // cleanup
+        for (let i = 0; i < dlBlockKeys.length; i++)
+        {
+            let thisKey = parseInt(dlBlockKeys[i]);
+            if (thisKey < this.myBlockHeight)
+            {
+                delete this.downloadedBlocks[thisKey];
+            }
+        }
+
+        if (Object.keys(this.downloadedBlocks).length > 0)
         {
 
             let nextHeight = this.myBlockHeight + 1;
 
-            while (true)
+            while (nextHeight > 0)
             {
 
                 if (this.downloadedBlocks[nextHeight] && this.downloadedBlocks[nextHeight] !== 'pending')
@@ -1516,12 +1526,14 @@ logger.warn(e);
                         const previousHeight = nextHeight - 1;
                         await this.doBlockRollback(previousHeight);
                         this.queueProcessor.requeue(nextHeight);
+                        nextHeight = 0;
                         break;
                     }
 
                 }
                 else
                 {
+                    nextHeight = 0;
                     break;
                 }
                 
