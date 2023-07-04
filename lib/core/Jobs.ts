@@ -1658,13 +1658,14 @@ logger.warn(e);
                 if (this.downloadedBlocks[i] && this.downloadedBlocks[i] !== 'pending')
                 {
 
-                    const data = this.downloadedBlocks[nextHeight];
+                    const data = this.downloadedBlocks[i];
 
                     try {
                         await this.importBlock(data);
                         delete this.downloadedBlocks[i];
                     } catch (e) {
 logger.warn(e);
+console.log(e);
                         delete this.downloadedBlocks[i];
                         this.queueProcessor.requeue(i);
                         const previousHeight = i - 1;
