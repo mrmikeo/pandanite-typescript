@@ -505,7 +505,7 @@ console.log("Peer catch " + thisPeer);
         this.printPeeringInfo();
 
         this.downloadBlocks();
-        // this.syncBlocks();
+        this.syncBlocks();
 
     }
 
@@ -956,8 +956,10 @@ console.log("Peer catch " + thisPeer);
 
         logger.info("-----------------------------------");
 
-        await sleep(30000);
-        this.printPeeringInfo();
+        setTimeout(() => {
+            this.printPeeringInfo();
+        },30000);
+
         return true;
 
     }
@@ -1411,8 +1413,10 @@ logger.warn(e);
 
         console.log("end checkPeers");
 
-        await sleep(20000);
-        this.checkPeers();
+        setTimeout(() => {
+            this.checkPeers();
+        },30000);
+
         return true;
 
     }
@@ -1548,8 +1552,10 @@ logger.warn(e);
 
         console.log("end findPeers");
 
-        await sleep(60000);
-        this.findPeers();
+        setTimeout(() => {
+            this.findPeers();
+        },60000);
+
         return true;
 
     }
@@ -1609,8 +1615,11 @@ logger.warn(e);
         }
 
         console.log("end downloadblocks");
-        await sleep(1000);
-        this.downloadBlocks();
+
+        setTimeout(() => {
+            this.downloadBlocks();
+        },1000);
+
         return true;
     }
 
@@ -1640,38 +1649,36 @@ logger.warn(e);
         {
 
             let nextHeight = this.myBlockHeight + 1;
-            let runs = 0;
+            let maxRunHeight = nextHeight + 500;
 
-            while (runs < 500)
+            importer:
+            for (let i = nextHeight; i < maxRunHeight; i++)
             {
-                runs++;
-                if (this.downloadedBlocks[nextHeight] && this.downloadedBlocks[nextHeight] !== 'pending')
+
+                if (this.downloadedBlocks[i] && this.downloadedBlocks[i] !== 'pending')
                 {
 
                     const data = this.downloadedBlocks[nextHeight];
 
                     try {
                         await this.importBlock(data);
-                        delete this.downloadedBlocks[nextHeight];
-                        nextHeight++;
+                        delete this.downloadedBlocks[i];
                     } catch (e) {
 logger.warn(e);
-                        delete this.downloadedBlocks[nextHeight];
-                        const previousHeight = nextHeight - 1;
+                        delete this.downloadedBlocks[i];
+                        this.queueProcessor.requeue(i);
+                        const previousHeight = i - 1;
                         await this.doBlockRollback(previousHeight);
-                        this.queueProcessor.requeue(previousHeight);
-                        break;
+                        break importer;
                     }
 
                 }
                 else
                 {
-                    break;
+                    break importer;
                 }
                 
             }
-
-            this.queueProcessor.requeue(nextHeight);
 
         }
 
@@ -1681,8 +1688,10 @@ logger.warn(e);
 
         console.log("end syncblocks");
 
-        await sleep(1000);
-        this.syncBlocks();
+        setTimeout(() => {
+            this.syncBlocks();
+        },1000);
+
         return true;
 
     }
