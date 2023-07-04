@@ -505,7 +505,7 @@ console.log("Peer catch " + thisPeer);
         this.printPeeringInfo();
 
         this.downloadBlocks();
-        this.syncBlocks();
+        // this.syncBlocks();
 
     }
 
