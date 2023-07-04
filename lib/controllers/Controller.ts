@@ -487,6 +487,60 @@ export class ApiController{
 
     }
 
+    public async getTxJsonWs(): Promise<any> { // Ws API
+
+        try {
+
+            const memPool = await Mempool.find();
+
+            const response = [];
+
+            for (let i = 0; i < memPool.length; i++)
+            {
+                const thistx = memPool[i];
+
+                let tx = {
+                    type: thistx.type,
+                    amount: thistx.amount,
+                    fee: thistx.fee,
+                    from: thistx.from,
+                    to: thistx.to,
+                    timestamp: thistx.nonce,
+                    nonce: thistx.nonce,
+                    txid:  thistx.hash
+                };
+
+                if (thistx.signature)
+                {
+                    tx["signature"] = thistx.signature;
+                }
+
+                if (thistx.signingKey)
+                {
+                    tx["signingKey"] = thistx.signingKey;
+                }
+
+                if (thistx.token)
+                {
+                    tx["token"] = thistx.token;
+                    tx["tokenAmount"] = thistx.amount;
+                    tx["amount"] = 0;
+                }
+
+                response.push(tx);
+
+            }
+
+            return response;
+
+        } catch (e) {
+
+            return [];
+
+        }
+
+    }
+
     // input is blockId in query
     public async getMineStatus (req: Request, res: Response) { 
 
@@ -860,6 +914,31 @@ console.log(peerInfo);
         console.log("getSync REST endpoint called")
         //console.log(req.body);
 
+        /*
+
+            if (req->getQuery("start").length() == 0 || req->getQuery("end").length() == 0) {
+                json err;
+                err["error"] = "No query parameters specified";
+                res->writeHeader("Content-Type", "application/json; charset=utf-8")->end(err.dump());
+                return;
+            }
+            int start = std::stoi(string(req->getQuery("start")));
+            int end = std::stoi(string(req->getQuery("end")));
+            if ((end-start) > BLOCKS_PER_FETCH) {
+                Logger::logError("/v2/sync", "invalid range requested");
+                res->end("");
+            }
+            res->writeHeader("Content-Type", "application/octet-stream");
+            for (int i = start; i <=end; i++) {
+                std::pair<uint8_t*, size_t> buffer = manager.getRawBlockData(i);
+                std::string_view str((char*)buffer.first, buffer.second);
+                res->write(str);
+                delete buffer.first;
+            }
+            res->end("");
+
+        */
+
     }
 
     // octect stream
@@ -875,6 +954,44 @@ console.log(peerInfo);
 
         console.log("getSyncTx REST endpoint called")
         //console.log(req.body);
+
+        //res->writeHeader("Content-Type", "application/octet-stream");
+        //std::pair<char*, size_t> buffer = manager.getRawTransactionData();
+
+        /*
+
+            std::pair<char*, size_t> MemPool::getRaw() const{
+                std::unique_lock<std::mutex> lock(mempool_mutex);
+                size_t len = transactionQueue.size() * TRANSACTIONINFO_BUFFER_SIZE;
+                char* buf = (char*) malloc(len);
+                int count = 0;
+                
+                for (const auto& tx : transactionQueue) {
+                    TransactionInfo t = tx.serialize();
+                    transactionInfoToBuffer(t, buf + count);`
+                    count += TRANSACTIONINFO_BUFFER_SIZE;
+                }
+
+                return std::make_pair(buf, len);
+            }
+
+
+
+            void transactionInfoToBuffer(TransactionInfo& t, char* buffer) {
+                writeNetworkNBytes(buffer, t.signature, 64);
+                writeNetworkNBytes(buffer, t.signingKey, 32);
+                writeNetworkUint64(buffer, t.timestamp);    // 8
+                writeNetworkPublicWalletAddress(buffer, t.to);  //25
+                writeNetworkUint64(buffer, t.amount);   // 8
+                writeNetworkUint64(buffer, t.fee);    // 8
+                uint32_t flag = 0;
+                if (t.isTransactionFee) flag = 1;
+                writeNetworkUint32(buffer, flag);    // 4
+            }
+
+
+
+        */
 
     }
 

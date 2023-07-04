@@ -297,6 +297,92 @@ export class PandaniteCore{
         return ed25519.Verify(Buffer.from(message, 'utf8'), Buffer.from(signature, 'hex'), Buffer.from(publicKey, 'hex'));
     }
 
+    static transactionToBuffer(transaction: any): Buffer {
+        
+        const tx = {
+            "from": transaction.from, 
+            "to": transaction.to, 
+            "fee": transaction.fee,
+            "amount": transaction.amount, 
+            "timestamp": transaction.timestamp,
+            "signature": transaction.signature,
+            "signingKey": transaction.signingKey
+        };
+
+        let isGenerate = '0';
+        if (transaction.from == "") isGenerate = '1';
+
+        // Total buffer size 149
+        let signatureBuffer = Buffer.from(unhexlify(transaction.signature));                        // 64
+        let signingKeyBuffer = Buffer.from(unhexlify(transaction.signingKey));                      // 32
+        let timestampBuffer = Buffer.from(pad(dec2hex(transaction.timestamp), 16, '0'), 'hex');     // 8
+        let addressBuffer = Buffer.from(unhexlify(transaction.to));                                 // 25
+        let amountBuffer = Buffer.from(pad(dec2hex(transaction.amount), 16, '0'), 'hex');           // 8
+        let feeBuffer = Buffer.from(pad(dec2hex(transaction.fee), 16, '0'), 'hex');                 // 8
+        let generateBuffer = Buffer.from(pad(dec2hex(isGenerate), 8, '0'), 'hex');                  // 4
+
+        return Buffer.concat([signatureBuffer, signingKeyBuffer, timestampBuffer, addressBuffer, amountBuffer, feeBuffer, generateBuffer]);
+
+    }
+
+    static transactionFromBuffer(txbuffer: Buffer): any {
+        
+        console.log(txbuffer.length);
+
+        let signatureBuffer = txbuffer.subarray(0,63);
+        let signingKeyBuffer = txbuffer.subarray(64,95);
+        let timestampBuffer = txbuffer.subarray(96,103);
+        let addressBuffer = txbuffer.subarray(104,128);
+        let amountBuffer = txbuffer.subarray(129,136);
+        let feeBuffer = txbuffer.subarray(137,144);
+        let generateBuffer = txbuffer.subarray(145,148);
+
+
+        const tx = {
+            "from": PandaniteCore.walletAddressFromPublicKey(signingKeyBuffer.toString('hex')), 
+            "to": addressBuffer.toString('hex'),
+            "fee": parseInt(feeBuffer.toString('hex'), 16),
+            "amount": parseInt(amountBuffer.toString('hex'), 16),
+            "timestamp": parseInt(timestampBuffer.toString('hex'), 16),
+            "signature": signatureBuffer.toString('hex'),
+            "signingKey": signingKeyBuffer.toString('hex'),
+            "isTransactionFee": parseInt(generateBuffer.toString('hex'), 16)
+        };
+
+        console.log(tx);
+
+        /*
+        let isGenerate = '0';
+        if (transaction.from == "") isGenerate = '1';
+
+        let signatureBuffer = Buffer.from(unhexlify(transaction.signature));
+        let signingKeyBuffer = Buffer.from(unhexlify(transaction.signingKey));
+        let timestampBuffer = Buffer.from(pad(dec2hex(transaction.timestamp), 16, '0'), 'hex');
+        let addressBuffer = Buffer.from(unhexlify(transaction.to));
+        let amountBuffer = Buffer.from(pad(dec2hex(transaction.amount), 16, '0'), 'hex');
+        let feeBuffer = Buffer.from(pad(dec2hex(transaction.fee), 16, '0'), 'hex');
+        let generateBuffer = Buffer.from(pad(dec2hex(isGenerate), 8, '0'), 'hex');
+
+        return Buffer.concat([signatureBuffer, signingKeyBuffer, timestampBuffer, addressBuffer, amountBuffer, feeBuffer, generateBuffer]);
+
+
+            void transactionInfoToBuffer(TransactionInfo& t, char* buffer) {
+                writeNetworkNBytes(buffer, t.signature, 64);
+                writeNetworkNBytes(buffer, t.signingKey, 32);
+                writeNetworkUint64(buffer, t.timestamp);    // 8
+                writeNetworkPublicWalletAddress(buffer, t.to);  //25
+                writeNetworkUint64(buffer, t.amount);   // 8
+                writeNetworkUint64(buffer, t.fee);    // 8
+                uint32_t flag = 0;
+                if (t.isTransactionFee) flag = 1;
+                writeNetworkUint32(buffer, flag);    // 4
+            }
+
+        */
+
+
+    }
+
     static getTransactionId(transaction: any): string {
 
         const tx = {

@@ -14,19 +14,20 @@ export class WebSocketProcessor {
     this.ws.on('error', this.handleError.bind(this));
   }
 
-  private async handleMessage(data: WebSocket.Data): Promise<void> {
+  private async handleMessage(wsdata: WebSocket.Data): Promise<void> {
 
     try {
 
-        const message = JSON.parse(data.toString());
+        const message = JSON.parse(wsdata.toString());
 
         let response = {};
+        let data: any;
 
         switch (message.method) {
             case 'getBlock':
                 if (message.blockId && parseInt(message.blockId) > 0)
                 {
-                    let data = await this.apiSrv.getBlockWs(message.blockId);
+                    data = await this.apiSrv.getBlockWs(message.blockId);
                     if (!data.error) 
                     {
                         response = {
@@ -55,7 +56,7 @@ export class WebSocketProcessor {
                 this.ws.send(this.formatReponse(response, message.messageId));
                 break;
             case 'getStats':
-                let data = await this.apiSrv.getStatsWs();
+                data = await this.apiSrv.getStatsWs();
                 if (!data.error) 
                 {
                     response = {
@@ -73,11 +74,10 @@ export class WebSocketProcessor {
                 this.ws.send(this.formatReponse(response, message.messageId));
                 break;
             case 'getVersion':
-
-                this.ws.send(this.formatReponse(response, message.messageId));
-                break;
-            case 'getMempool':
-
+                response = {
+                    statusCode: 200,
+                    data: globalThis.appVersion
+                };
                 this.ws.send(this.formatReponse(response, message.messageId));
                 break;
             case 'newBlock':
@@ -86,6 +86,24 @@ export class WebSocketProcessor {
                 break;
             case 'newTransaction':
 
+                this.ws.send(this.formatReponse(response, message.messageId));
+                break;
+            case 'getMempool':
+                data = await this.apiSrv.getTxJsonWs();
+                if (!data.error) 
+                {
+                    response = {
+                        statusCode: 200,
+                        data: data
+                    };
+                }
+                else
+                {
+                    response = {
+                        statusCode: 400,
+                        error: data.error
+                    };
+                }
                 this.ws.send(this.formatReponse(response, message.messageId));
                 break;
             default:
