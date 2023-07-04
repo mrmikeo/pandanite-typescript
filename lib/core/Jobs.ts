@@ -858,8 +858,6 @@ export class PandaniteJobs{
 
     public async checkPeers()  {
 
-console.log("running checkPeers");
-
         this.checkingPeers = true;
         this.checkPeerLock = Date.now();
         const that = this;
@@ -867,7 +865,7 @@ console.log("running checkPeers");
         const peerList = await Peer.find({isActive: true});
 
         this.pendingPeers = [];
-        
+
         for (let i = 0; i < peerList.length; i++)
         {
             let thisPeer = peerList[i];
@@ -882,8 +880,6 @@ console.log("running checkPeers");
         }
 
         this.pendingPeers.forEach(async (peer) => {
-
-console.log("Testing.. " + peer);
 
             let stripPeer = peer.replace('http://', '');
             let splitPeer = stripPeer.split(":");
@@ -1303,8 +1299,6 @@ logger.warn(e);
 
     public async findPeers()  {
 
-console.log("running findPeers");
-
         this.findingPeers = true;
         this.findPeerLock = Date.now();
 
@@ -1504,21 +1498,30 @@ console.log("running findPeers");
 
             let nextHeight = this.myBlockHeight + 1;
 
-            while (this.downloadedBlocks[nextHeight] && this.downloadedBlocks[nextHeight] !== 'pending')
+            while (true)
             {
 
-                const data = this.downloadedBlocks[nextHeight];
+                if (this.downloadedBlocks[nextHeight] && this.downloadedBlocks[nextHeight] !== 'pending')
+                {
 
-                try {
-                    await this.importBlock(data);
-                    delete this.downloadedBlocks[nextHeight];
-                    nextHeight++;
-                } catch (e) {
+                    const data = this.downloadedBlocks[nextHeight];
+
+                    try {
+                        await this.importBlock(data);
+                        delete this.downloadedBlocks[nextHeight];
+                        nextHeight++;
+                    } catch (e) {
 logger.warn(e);
-                    delete this.downloadedBlocks[nextHeight];
-                    const previousHeight = nextHeight - 1;
-                    await this.doBlockRollback(previousHeight);
-                    this.queueProcessor.requeue(nextHeight);
+                        delete this.downloadedBlocks[nextHeight];
+                        const previousHeight = nextHeight - 1;
+                        await this.doBlockRollback(previousHeight);
+                        this.queueProcessor.requeue(nextHeight);
+                        break;
+                    }
+
+                }
+                else
+                {
                     break;
                 }
                 
