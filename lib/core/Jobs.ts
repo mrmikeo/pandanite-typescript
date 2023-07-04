@@ -858,6 +858,8 @@ export class PandaniteJobs{
 
     public async checkPeers()  {
 
+console.log("running checkPeers");
+
         this.checkingPeers = true;
         this.checkPeerLock = Date.now();
         const that = this;
@@ -1274,6 +1276,8 @@ logger.warn(e);
 
     public async findPeers()  {
 
+console.log("running findPeers");
+
         this.findingPeers = true;
         this.findPeerLock = Date.now();
 
@@ -1386,32 +1390,40 @@ logger.warn(e);
 
         if (maxHeight < end) end = maxHeight;
 
-        for (let i = 0; i < this.activePeers.length; i++)
+        if (start > end)
         {
-            const thisPeer = this.activePeers[i];
-            if (!this.queueProcessor.hasWorker(thisPeer))
-            {
-                this.queueProcessor.addWorker(thisPeer);
-            }
+            this.downloadingBlocks = false;
+            return true;
         }
-
-        let queuedCount = 0;
-        for (let i = start; i <= end; i++)
+        else
         {
 
-            if (!this.downloadedBlocks[i] && !this.queueProcessor.hasqueue(i))
+            for (let i = 0; i < this.activePeers.length; i++)
             {
-                this.downloadedBlocks[i] = 'pending';
-                this.queueProcessor.enqueue(i);
-                queuedCount++;
+                const thisPeer = this.activePeers[i];
+                if (!this.queueProcessor.hasWorker(thisPeer))
+                {
+                    this.queueProcessor.addWorker(thisPeer);
+                }
             }
-            
+
+            let queuedCount = 0;
+            for (let i = start; i <= end; i++)
+            {
+
+                if (!this.downloadedBlocks[i] && !this.queueProcessor.hasqueue(i))
+                {
+                    this.downloadedBlocks[i] = 'pending';
+                    this.queueProcessor.enqueue(i);
+                    queuedCount++;
+                }
+                
+            }
+
+            this.downloadingBlocks = false;
+
+            return true;
         }
-
-        this.downloadingBlocks = false;
-
-        return true;
-
     }
 
     public async syncBlocks()  {
