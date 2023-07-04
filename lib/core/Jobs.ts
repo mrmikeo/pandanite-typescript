@@ -90,18 +90,18 @@ class AsyncQueue<T> {
     }
 }
   
-type Worker<T> = (hostname: string, item: T) => Promise<void>;
+type Worker<T> = (that: any, hostname: string, item: T) => Promise<void>;
 
 class QueueProcessor<T> {
     private queue: AsyncQueue<T>;
     private workers: Map<string, boolean>;
     private workerFunction: Worker<T>;
   
-    constructor() {
+    constructor(that) {
       this.queue = new AsyncQueue<T>();
       this.workers = new Map<string, boolean>();
       this.workerFunction = this.defaultWorkerFunction;
-      this.processQueue();
+      this.processQueue(that);
     }
   
     addWorker(hostname: string): void {
@@ -120,7 +120,7 @@ class QueueProcessor<T> {
         return this.workers.has(hostname);
     }
 
-    async processQueue(): Promise<void> {
+    async processQueue(that: T): Promise<void> {
         while (true) {
           const availableWorkers = Array.from(this.workers.entries()).filter(
             ([_, isWorking]) => !isWorking
@@ -136,7 +136,7 @@ class QueueProcessor<T> {
           const [hostname] = availableWorkers[Math.floor(Math.random() * availableWorkers.length)]; // Select a random available worker
           this.workers.set(hostname, true); // Mark the worker as busy
     
-          this.workerFunction(hostname, item).then(() => {
+          this.workerFunction(that, hostname, item).then(() => {
             this.workers.set(hostname, false); // Mark the worker as available again
           });
         }
@@ -156,9 +156,118 @@ class QueueProcessor<T> {
         return this.queue.hasqueue(item);
     }
 
-    private defaultWorkerFunction: Worker<T> = async (hostname, item) => {
-      await new Promise((resolve) => setTimeout(resolve, 10));
+    private defaultWorkerFunction: Worker<T> = async (that, thisPeer, height) => {
+
+        try {
+
+            if (that.peerHeights[thisPeer] >= height)
+            {
+                // has blocks we can download
+
+                // what version is this peer? can we do ws?
+                if (that.websocketPeers[thisPeer])
+                {
+
+                    // get block via websocket
+
+                    const messageId = that.stringToHex(thisPeer) + "." + uuidv4();
+
+                    const message = {
+                        method: 'getBlock',
+                        blockId: height,
+                        messageId: messageId
+                    };
+
+                    that.wsRespFunc[messageId] = (peer: string, messageId: string, data: string) => {
+
+                        try {
+
+                            const jsonparse = JSON.parse(data);
+                            const jsondata = jsonparse.data;
+
+                            if (jsondata && jsondata.hash)
+                            {
+
+                                that.downloadedBlocks[height] = jsondata;
+                                delete that.wsRespFunc[messageId];
+
+                            }
+                            else
+                            {
+                                //const index = this.activePeers.indexOf(thisPeer);
+                                //if (index > -1) {
+                                //    this.activePeers.splice(index, index);
+                                //}
+                                delete that.downloadedBlocks[height];
+                                //this.queueProcessor.removeWorker(thisPeer);
+                                that.queueProcessor.requeue(height);
+                                delete that.wsRespFunc[messageId];
+                            }
+
+                        } catch (e) {
+
+
+                        }
+
+                    };
+
+                    try {
+                        that.websocketPeers[thisPeer].send(JSON.stringify(message));
+                    } catch (e) {
+                        logger.warn(e);
+                        delete that.wsRespFunc[messageId];
+                        delete that.websocketPeers[thisPeer];
+                    }
+                }
+                else
+                {
+                
+                    const response = await axios({
+                        url: thisPeer + "/block?blockId=" + height,
+                        method: 'get',
+                        responseType: 'json'
+                    });
+        
+                    const data = response.data;
+        
+                    if (data && data.hash)
+                    {
+                        that.downloadedBlocks[height] = response.data;
+                    }
+                    else
+                    {
+                        delete that.downloadedBlocks[height];
+                        that.queueProcessor.removeWorker(thisPeer);
+                        that.queueProcessor.requeue(height);
+                    }
+
+                }
+
+            }
+            else
+            {
+
+                delete that.downloadedBlocks[height];
+                that.queueProcessor.requeue(height);
+
+            }
+
+        } catch (e) {
+
+console.log("Peer catch " + thisPeer);
+
+            that.removeActivePeer(thisPeer);
+            delete that.downloadedBlocks[height];
+            that.queueProcessor.removeWorker(thisPeer);
+            that.queueProcessor.requeue(height);
+
+        }
+
     };
+
+
+
+
 }
 
 export class PandaniteJobs{
@@ -197,7 +306,7 @@ export class PandaniteJobs{
         this.downloadedBlocks = {};
         this.peerHeights = {};
         this.peerVersions = {};
-        this.queueProcessor = new QueueProcessor<number>();
+        this.queueProcessor = new QueueProcessor<number>(this);
         this.myBlockHeight = 0;
         this.difficulty = 16;
         this.websocketPeers = {}; // v2 peers only
@@ -267,7 +376,7 @@ export class PandaniteJobs{
         } catch (e) {}
 
         // start jobs for syncing peers list & blocks
-
+/*
         const workerFunction: Worker<number> = async (thisPeer, height) => {
 
             try {
@@ -379,6 +488,7 @@ console.log("Peer catch " + thisPeer);
 
         // Add worker function to the processing queue
         this.queueProcessor.addFunction(workerFunction);
+*/
 
         const lastDiffHeight = Math.floor(height/Constants.DIFFICULTY_LOOKBACK)*Constants.DIFFICULTY_LOOKBACK;
 
@@ -856,6 +966,8 @@ console.log("Peer catch " + thisPeer);
 
         if (globalThis.shuttingDown === true) return false;
 
+        console.log("start checkPeers");
+
         this.checkingPeers = true;
         this.checkPeerLock = Date.now();
         
@@ -1297,6 +1409,8 @@ logger.warn(e);
         this.checkingPeers = false;
         this.checkPeerLock = 0;
 
+        console.log("end checkPeers");
+
         await sleep(20000);
         this.checkPeers();
         return true;
@@ -1306,7 +1420,9 @@ logger.warn(e);
     public async findPeers()  {
 
         if (globalThis.shuttingDown === true) return false;
-        
+
+        console.log("start findPeers");
+
         this.findingPeers = true;
         this.findPeerLock = Date.now();
 
@@ -1429,6 +1545,8 @@ logger.warn(e);
 
         this.findingPeers = false;
         this.findPeerLock = 0;
+
+        console.log("end findPeers");
 
         await sleep(60000);
         this.findPeers();
