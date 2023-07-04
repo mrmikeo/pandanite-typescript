@@ -7,6 +7,7 @@ import { Constants } from "./Constants"
 import * as minimist from 'minimist';
 import * as WebSocket from 'ws';
 import { v4 as uuidv4 } from 'uuid';
+import * as sleep from 'sleep-promise';
 
 import { createLogger, format, transports } from 'winston';
 
@@ -405,17 +406,8 @@ console.log("Peer catch " + thisPeer);
             this.printPeeringInfo();
         }, 20000);
 
-        let interval2 = setInterval(() => {
-            console.log("interval2");
-            if (this.downloadingBlocks === false)
-            {
-                this.downloadBlocks();
-            }
-            if (this.syncingBlocks === false && globalThis.shuttingDown === false)
-            {
-                this.syncBlocks();
-            }
-        }, 1000);
+        this.downloadBlocks();
+        this.syncBlocks();
 
     }
 
@@ -1470,8 +1462,6 @@ logger.warn(e);
         if (start > end)
         {
             this.downloadingBlocks = false;
-            console.log("end downloadblocks");
-            return true;
         }
         else
         {
@@ -1497,9 +1487,12 @@ logger.warn(e);
             }
 
             this.downloadingBlocks = false;
-            console.log("end downloadblocks");
-            return true;
+
         }
+
+        console.log("end downloadblocks");
+        await sleep(1000);
+        this.downloadBlocks();
     }
 
     public async syncBlocks()  {
@@ -1567,7 +1560,8 @@ logger.warn(e);
 
         console.log("end syncblocks");
 
-        return true;
+        await sleep(1000);
+        this.syncBlocks();
 
     }
 
