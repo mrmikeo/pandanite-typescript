@@ -1578,7 +1578,7 @@ logger.warn(e);
             let pendingAmounts = {};
 
             // Check Balances - excluded for block height < 500,000 as there are a few transactions that do not pass this test
-            if (block.id > 500000)
+            if (block.id > 510000)
             for (let i = 0; i < block.transactions.length; i++)
             {
                 const thisTrx = block.transactions[i];
