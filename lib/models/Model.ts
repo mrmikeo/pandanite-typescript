@@ -50,6 +50,9 @@ export const transactionSchema = new Schema({
         type: Schema.Types.ObjectId,
         ref: 'Block',
     },
+    blockHeight: {
+        type: Number
+    },
     blockIndex: {
         type: Number
     },
@@ -67,6 +70,7 @@ transactionSchema.index({ toAddress: 1 });
 transactionSchema.index({ fromAddress: 1 });
 transactionSchema.index({ hash: 1 });
 transactionSchema.index({ block: 1 });
+transactionSchema.index({ blockHeight: 1 });
 
 export const addressSchema = new Schema({
     address: {

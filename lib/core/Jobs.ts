@@ -1594,12 +1594,71 @@ logger.warn(e);
 
             const blockInfo = await Block.findOne({height: height}).populate("transactions");
 
-            try {
+            if (blockInfo)
+            {
 
-                for (let i = 0; i < blockInfo.transactions.length; i++)
+                try {
+
+                    for (let i = 0; i < blockInfo.transactions.length; i++)
+                    {
+
+                        const thisTx = blockInfo.transactions[i];
+
+                        let fromAddress = await Address.findOne({_id: thisTx.fromAddress});
+
+                        if (fromAddress.address !== "00000000000000000000000000000000000000000000000000" && fromAddress.address !== "")
+                        {
+                            const increaseAmount = Number(Big(thisTx.amount).plus(thisTx.fee).toFixed(0));
+                            await Balance.updateOne({address: thisTx.fromAddress, token: thisTx.token}, {$inc: {balance: increaseAmount}});
+                        }
+
+                        const deductionAmount = Number(Big(thisTx.amount).times(-1).toFixed(0));
+
+                        await Balance.updateOne({address: thisTx.toAddress, token: thisTx.token}, {$inc: {balance: deductionAmount}});
+
+                        await Transaction.deleteOne({_id: thisTx._id});
+
+                    }
+
+                    await Block.deleteOne({_id: blockInfo._id});
+
+                    this.myBlockHeight = height - 1;
+
+                    const lastDiffHeight = Math.floor(this.myBlockHeight/Constants.DIFFICULTY_LOOKBACK)*Constants.DIFFICULTY_LOOKBACK;
+
+                    await this.updateDifficultyForHeight(lastDiffHeight);
+        
+                    resolve(true);
+
+                } catch (e) {
+
+                    // in case of fail above, then we should start over or at least run a recompute on the chain...
+
+                    logger.warn(blockInfo);
+
+                    logger.warn(e);
+
+                    logger.warn("Caught error on rollback.  EXIT")
+
+                    process.exit(-1);
+
+                    //await Block.deleteMany();
+                    //await Transaction.deleteMany();
+                    //await Balance.deleteMany();
+                    //await Token.deleteMany();
+
+                }
+
+            }
+            else
+            {
+
+                const txList = Transaction.find({blockHeight: height});
+
+                for (let i = 0; i < txList.length; i++)
                 {
 
-                    const thisTx = blockInfo.transactions[i];
+                    const thisTx = txList[i];
 
                     let fromAddress = await Address.findOne({_id: thisTx.fromAddress});
 
@@ -1617,8 +1676,6 @@ logger.warn(e);
 
                 }
 
-                await Block.deleteOne({_id: blockInfo._id});
-
                 this.myBlockHeight = height - 1;
 
                 const lastDiffHeight = Math.floor(this.myBlockHeight/Constants.DIFFICULTY_LOOKBACK)*Constants.DIFFICULTY_LOOKBACK;
@@ -1626,23 +1683,6 @@ logger.warn(e);
                 await this.updateDifficultyForHeight(lastDiffHeight);
     
                 resolve(true);
-
-            } catch (e) {
-
-                // in case of fail above, then we should start over or at least run a recompute on the chain...
-
-                logger.warn(blockInfo);
-
-                logger.warn(e);
-
-                logger.warn("Caught error on rollback.  EXIT")
-
-                process.exit(-1);
-
-                //await Block.deleteMany();
-                //await Transaction.deleteMany();
-                //await Balance.deleteMany();
-                //await Token.deleteMany();
 
             }
 
@@ -1716,7 +1756,7 @@ logger.warn(e);
                     let pendingAmounts = {};
 
                     // Check Balances - excluded for block height < 510,000 as there are a few transactions that do not pass this test
-                    if (block.id > 510000)
+                    if (block.id > 530000)
                     for (let i = 0; i < block.transactions.length; i++)
                     {
                         const thisTrx = block.transactions[i];
@@ -1971,6 +2011,7 @@ logger.warn(e);
                                 nonce: thisTx.timestamp,
                                 signingKey: thisTx.signingKey?thisTx.signingKey.toUpperCase():null,
                                 block: blockInfo._id,
+                                blockHeight: block.id,
                                 blockIndex: i,
                                 createdAt: Date.now(),
                                 updatedAt: Date.now()
@@ -2045,15 +2086,15 @@ logger.warn(e);
 
     private async updateDifficulty() {
 
-        if (this.myBlockHeight <= Constants.DIFFICULTY_LOOKBACK * 2) return;
-        if (this.myBlockHeight % Constants.DIFFICULTY_LOOKBACK !== 0) return;
+        if (this.myBlockHeight <= Constants.DIFFICULTY_LOOKBACK * 2) return false;
+        if (this.myBlockHeight % Constants.DIFFICULTY_LOOKBACK !== 0) return false;
 
         const firstID: number = this.myBlockHeight - Constants.DIFFICULTY_LOOKBACK;
         const lastID: number = this.myBlockHeight;
         const first = await Block.findOne({height: firstID});
         const last = await Block.findOne({height: lastID});
 
-        if (!first || !last) return;
+        if (!first || !last) return false;
 
         const elapsed: number = last.timestamp - first.timestamp;
         const numBlocksElapsed: number = lastID - firstID;
@@ -2076,8 +2117,8 @@ logger.warn(e);
 
     private async updateDifficultyForHeight(height: number) {
 
-        if (height <= Constants.DIFFICULTY_LOOKBACK * 2) return;
-        if (height % Constants.DIFFICULTY_LOOKBACK !== 0) return;
+        if (height <= Constants.DIFFICULTY_LOOKBACK * 2) return false;
+        if (height % Constants.DIFFICULTY_LOOKBACK !== 0) return false;
 
         const firstID: number = height - Constants.DIFFICULTY_LOOKBACK;
         const lastID: number = height;
@@ -2087,13 +2128,13 @@ logger.warn(e);
         if (!first)
         {
             logger.info("Could not find first block: " + firstID);
-            return;
+            return false;
         }
 
         if (!last)
         {
             logger.info("Could not find last block: " + lastID);
-            return;
+            return false;
         }
 
         const elapsed: number = last.timestamp - first.timestamp;
