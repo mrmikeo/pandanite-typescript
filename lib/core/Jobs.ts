@@ -861,7 +861,450 @@ export class PandaniteJobs{
 
     }
 
-    // refactor
+    public async checkPeer(peer: string): Promise<boolean> {
+
+        return new Promise<boolean>(async (resolve, reject) => {
+
+            let stripPeer = peer.replace('http://', '');
+            let splitPeer = stripPeer.split(":");
+
+            if (splitPeer[0] !== this.myIpAddress)
+            {  
+
+                if (this.peerVersions[peer] === 2) // PEER VERSION 2
+                {
+
+                    // Check if already connected to v2 peer
+                    if (this.websocketPeers[peer])
+                    {
+                        // check if websocket is still open
+                        if (this.websocketPeers[peer].readyState === WebSocket.OPEN)
+                        {
+                            
+                            // get stats
+                            const messageId = this.stringToHex(peer) + "." + uuidv4();
+
+                            const message = {
+                                method: 'getStats',
+                                messageId: messageId
+                            };
+
+                            this.wsRespFunc[messageId] = async (peer: string, messageId: string, data: string) => {
+
+                                try {
+
+                                    const jsonparse = JSON.parse(data);
+                                    const jsondata = jsonparse.data;
+
+                                    if (!jsondata || parseInt(jsondata.current_block) === 0) throw new Error('Bad Peer');
+
+                                    if (jsondata.network_name != globalThis.networkName) throw new Error('Bad Peer NetworkName');
+
+                                    this.peerVersions[peer] = 2; // assumed since this is ws
+            
+                                    if (!this.activePeers.includes(peer))
+                                    {
+                                        this.activePeers.push(peer);
+                                    }
+
+                                    this.peerHeights[peer] = parseInt(jsondata.current_block);
+            
+                                    const havePeer = await Peer.countDocuments({url: peer});
+            
+                                    if (havePeer == 0)
+                                    {
+            
+                                        let stripPeer = peer.replace('http://', '');
+                                        let splitPeer = stripPeer.split(":");
+            
+                                        await Peer.create({
+                                            url: peer,
+                                            ipAddress: splitPeer[0],
+                                            port: splitPeer[1],
+                                            lastSeen: Date.now(),
+                                            isActive: true,
+                                            lastHeight: parseInt(jsondata.current_block),
+                                            networkName: globalThis.networkName,
+                                            createdAt: Date.now(),
+                                            updatedAt: Date.now()
+                                        });
+            
+                                    }
+                                    else if (havePeer > 1)
+                                    {
+                                        await Peer.deleteMany({url: peer});
+
+                                        let stripPeer = peer.replace('http://', '');
+                                        let splitPeer = stripPeer.split(":");
+            
+                                        await Peer.create({
+                                            url: peer,
+                                            ipAddress: splitPeer[0],
+                                            port: splitPeer[1],
+                                            lastSeen: Date.now(),
+                                            isActive: true,
+                                            lastHeight: parseInt(jsondata.current_block),
+                                            networkName: globalThis.networkName,
+                                            createdAt: Date.now(),
+                                            updatedAt: Date.now()
+                                        });
+                                    }
+                                    else
+                                    {
+                                        await Peer.updateOne({url: peer}, {$set: {
+                                            lastSeen: Date.now(),
+                                            isActive: true,
+                                            lastHeight: parseInt(jsondata.current_block),
+                                            updatedAt: Date.now()
+                                        }});
+                                    }
+
+                                    delete this.wsRespFunc[messageId];
+
+                                    logger.info("Peer " + peer + ": OK");
+
+                                } catch (e) {
+    logger.warn(e);
+                                    delete this.wsRespFunc[messageId];
+
+                                    logger.warn("Peer " + peer + ": NOTOK");
+                                }
+
+                            };
+
+                            try {
+                                this.websocketPeers[peer].send(JSON.stringify(message));
+                            } catch (e) {
+                                // could not send message
+                                logger.warn("Peer " + peer + ": NOTOK");
+                                logger.warn(e);
+                                delete this.wsRespFunc[messageId];
+                                delete this.websocketPeers[peer]
+                            }
+                            
+                        }
+                        else
+                        {
+
+                            delete this.websocketPeers[peer];
+
+                        }
+
+                    }
+                    else
+                    {
+                        // Try to connect socket
+                        try {
+
+                            var that = this;
+
+                            const client = new WebSocket(peer.replace("http://", "ws://"), {handshakeTimeout: 3000, timeout: 3000});
+
+                            client.on('error', console.error);
+
+                            client.on('open', function open() {
+
+                                that.websocketPeers[peer] = client;
+
+                                // peer notify
+                                const messageId2 = that.stringToHex(peer) + "." + uuidv4();
+
+                                const message2 = {
+                                    method: 'peerNotify',
+                                    hostname: that.myIpAddress,
+                                    port: globalThis.appPort
+                                };
+
+                                try {
+                                    that.websocketPeers[peer].send(JSON.stringify(message2));
+                                } catch (e) {
+                                    // could not send message
+                                }
+
+                            
+
+
+
+
+                                // get stats
+
+                                const messageId = that.stringToHex(peer) + "." + uuidv4();
+
+                                const message = {
+                                    method: 'getStats',
+                                    messageId: messageId
+                                };
+
+                                that.wsRespFunc[messageId] = async (peer: string, messageId: string, data: string) => {
+
+                                    try {
+
+                                        const jsonparse = JSON.parse(data);
+                                        const jsondata = jsonparse.data;
+
+                                        if (!jsondata || parseInt(jsondata.current_block) === 0) throw new Error('Bad Peer');
+
+                                        if (jsondata.network_name != globalThis.networkName) throw new Error('Bad Peer NetworkName');
+
+                                        that.peerVersions[peer] = 2; // assumed since this is ws
+                
+                                        if (!that.activePeers.includes(peer))
+                                        {
+                                            that.activePeers.push(peer);
+                                        }
+
+                                        that.peerHeights[peer] = parseInt(jsondata.current_block);
+                
+                                        const havePeer = await Peer.countDocuments({url: peer});
+            
+                                        if (havePeer == 0)
+                                        {
+                
+                                            let stripPeer = peer.replace('http://', '');
+                                            let splitPeer = stripPeer.split(":");
+                
+                                            await Peer.create({
+                                                url: peer,
+                                                ipAddress: splitPeer[0],
+                                                port: splitPeer[1],
+                                                lastSeen: Date.now(),
+                                                isActive: true,
+                                                lastHeight: parseInt(jsondata.current_block),
+                                                networkName: globalThis.networkName,
+                                                createdAt: Date.now(),
+                                                updatedAt: Date.now()
+                                            });
+                
+                                        }
+                                        else if (havePeer > 1)
+                                        {
+                                            await Peer.deleteMany({url: peer});
+        
+                                            let stripPeer = peer.replace('http://', '');
+                                            let splitPeer = stripPeer.split(":");
+                
+                                            await Peer.create({
+                                                url: peer,
+                                                ipAddress: splitPeer[0],
+                                                port: splitPeer[1],
+                                                lastSeen: Date.now(),
+                                                isActive: true,
+                                                lastHeight: parseInt(jsondata.current_block),
+                                                networkName: globalThis.networkName,
+                                                createdAt: Date.now(),
+                                                updatedAt: Date.now()
+                                            });
+                                        }
+                                        else
+                                        {
+                                            await Peer.updateOne({url: peer}, {$set: {
+                                                lastSeen: Date.now(),
+                                                isActive: true,
+                                                lastHeight: parseInt(jsondata.current_block),
+                                                updatedAt: Date.now()
+                                            }});
+                                        }
+
+                                        logger.info("Peer " + peer + ": OK");
+
+                                        if (!that.activePeers.includes(peer))
+                                        {
+                                            that.activePeers.push(peer);
+                                        }
+
+                                        delete that.wsRespFunc[messageId];
+
+                                    } catch (e) {
+    logger.warn(e);
+                                        logger.warn("Peer " + peer + ": NOTOK");
+                                        delete that.wsRespFunc[messageId];
+                                    }
+
+                                };
+
+                                try {
+                                    that.websocketPeers[peer].send(JSON.stringify(message));
+                                } catch (e) {
+                                    logger.warn("Peer " + peer + ": NOTOK");
+                                    logger.warn(e);
+                                    delete that.wsRespFunc[messageId];
+                                    delete that.websocketPeers[peer]
+                                }
+
+                            });
+                            
+                            client.on('message', function message(data) {
+
+                                try {
+
+                                    const jsondata = JSON.parse(data.toString());
+                                    if (that.wsRespFunc[jsondata.messageId])
+                                    {
+
+                                        that.wsRespFunc[jsondata.messageId](peer, jsondata.messageId, data.toString());
+
+                                    }
+
+                                } catch (e) {
+
+    logger.warn(e);
+
+                                }
+                            });
+
+                            client.on('close', async function close() {
+
+                                logger.warn('Websocket disconnected from peer: ' + peer);
+
+                                delete that.websocketPeers[peer];
+
+                                that.removeActivePeer(peer);
+
+                                await Peer.updateOne({url: peer}, {$set: {isActive: false, updatedAt: Date.now()}});
+
+                                // cleanup any open respfunc
+                                const peerHex = that.stringToHex(peer);
+
+                                const functionKeys = Object.keys(that.wsRespFunc);
+
+                                for (let i = 0; i < functionKeys.length; i++)
+                                {
+                                    let thisKey = functionKeys[i];
+
+                                    if (thisKey.indexOf(peerHex) === 0)
+                                    {
+                                        delete that.wsRespFunc[thisKey];
+                                    }
+
+                                }
+
+                            });
+
+                        } catch (e) {
+
+                            logger.warn("Peer " + peer + ": NOTOK");
+                            logger.warn(e);
+                            delete this.websocketPeers[peer]
+
+                        }
+
+                    }
+
+                }
+                else // PEER VERSION 1 or Unknown version
+                {
+
+                    try {
+
+                        const response = await axios.get(peer + "/stats");
+                        const data = response.data;
+
+                        if (!data || parseInt(data.current_block) === 0) {
+                            throw new Error('Bad Peer');
+                        }
+
+                        if (data.network_name && data.network_name != globalThis.networkName) {
+                            throw new Error('Bad Peer NetworkName');
+                        }
+
+                        if (data && data.node_version)
+                        {
+                            let splitVersion = data.node_version.split(".");
+                            if (parseInt(splitVersion[0]) >= 2)
+                            {
+                                this.peerVersions[peer] = 2;
+                            }
+                        }
+                        else
+                        {
+                            this.peerVersions[peer] = 1;
+                        }
+
+                        logger.info("Peer " + peer + ": OK");
+
+                        if (!this.activePeers.includes(peer))
+                        {
+                            this.activePeers.push(peer);
+                        }
+
+                        this.peerHeights[peer] = parseInt(data.current_block);
+
+                        const havePeer = await Peer.countDocuments({url: peer});
+        
+                        if (havePeer === 0)
+                        {
+
+                            let stripPeer = peer.replace('http://', '');
+                            let splitPeer = stripPeer.split(":");
+
+                            await Peer.create({
+                                url: peer,
+                                ipAddress: splitPeer[0],
+                                port: splitPeer[1],
+                                lastSeen: Date.now(),
+                                isActive: true,
+                                lastHeight: parseInt(data.current_block),
+                                networkName: globalThis.networkName,
+                                createdAt: Date.now(),
+                                updatedAt: Date.now()
+                            });
+
+                        }
+                        else if (havePeer > 1)
+                        {
+                            // too many records for same peer.  flush all and recreate
+
+                            await Peer.deleteMany({url: peer});
+
+                            let stripPeer = peer.replace('http://', '');
+                            let splitPeer = stripPeer.split(":");
+
+                            await Peer.create({
+                                url: peer,
+                                ipAddress: splitPeer[0],
+                                port: splitPeer[1],
+                                lastSeen: Date.now(),
+                                isActive: true,
+                                lastHeight: parseInt(data.current_block),
+                                networkName: globalThis.networkName,
+                                createdAt: Date.now(),
+                                updatedAt: Date.now()
+                            });
+                        }
+                        else
+                        {
+                            await Peer.updateOne({url: peer}, {$set: {
+                                lastSeen: Date.now(),
+                                isActive: true,
+                                lastHeight: parseInt(data.current_block),
+                                updatedAt: Date.now()
+                            }});
+                        }                        
+
+                    } catch (e) {
+
+                        //console.log(e);
+
+                        logger.warn("Peer " + peer + ": NOTOK");
+
+                        await Peer.updateMany({url: peer}, {$set: {isActive: false, updatedAt: Date.now()}});
+
+                        // peer timeout or some other issue - remove until somebody tells us its active again
+
+                        this.removeActivePeer(peer);
+                        
+                    }
+
+                }
+
+            }
+
+            resolve(true);
+
+        });
+
+    }
+
     public async checkPeers(): Promise<boolean>   {
 
         return new Promise<boolean>(async (resolve, reject) => {
@@ -888,443 +1331,14 @@ export class PandaniteJobs{
                 this.pendingPeers = globalThis.defaultPeers;
             }
 
-            this.pendingPeers.forEach(async (peer) => {
+            let allPromises = [];
 
-                let stripPeer = peer.replace('http://', '');
-                let splitPeer = stripPeer.split(":");
+            for (let i = 0; i < this.pendingPeers.length; i++)
+            {
+                allPromises[i] = await this.checkPeer(this.pendingPeers[i]);
+            }
 
-                if (splitPeer[0] !== this.myIpAddress)
-                {  
-
-                    if (this.peerVersions[peer] === 2) // PEER VERSION 2
-                    {
-
-                        // Check if already connected to v2 peer
-                        if (this.websocketPeers[peer])
-                        {
-                            // check if websocket is still open
-                            if (this.websocketPeers[peer].readyState === WebSocket.OPEN)
-                            {
-                                
-                                // get stats
-                                const messageId = this.stringToHex(peer) + "." + uuidv4();
-
-                                const message = {
-                                    method: 'getStats',
-                                    messageId: messageId
-                                };
-
-                                this.wsRespFunc[messageId] = async (peer: string, messageId: string, data: string) => {
-
-                                    try {
-
-                                        const jsonparse = JSON.parse(data);
-                                        const jsondata = jsonparse.data;
-
-                                        if (!jsondata || parseInt(jsondata.current_block) === 0) throw new Error('Bad Peer');
-
-                                        if (jsondata.network_name != globalThis.networkName) throw new Error('Bad Peer NetworkName');
-
-                                        this.peerVersions[peer] = 2; // assumed since this is ws
-                
-                                        if (!this.activePeers.includes(peer))
-                                        {
-                                            this.activePeers.push(peer);
-                                        }
-
-                                        this.peerHeights[peer] = parseInt(jsondata.current_block);
-                
-                                        const havePeer = await Peer.countDocuments({url: peer});
-                
-                                        if (havePeer == 0)
-                                        {
-                
-                                            let stripPeer = peer.replace('http://', '');
-                                            let splitPeer = stripPeer.split(":");
-                
-                                            await Peer.create({
-                                                url: peer,
-                                                ipAddress: splitPeer[0],
-                                                port: splitPeer[1],
-                                                lastSeen: Date.now(),
-                                                isActive: true,
-                                                lastHeight: parseInt(jsondata.current_block),
-                                                networkName: globalThis.networkName,
-                                                createdAt: Date.now(),
-                                                updatedAt: Date.now()
-                                            });
-                
-                                        }
-                                        else if (havePeer > 1)
-                                        {
-                                            await Peer.deleteMany({url: peer});
-
-                                            let stripPeer = peer.replace('http://', '');
-                                            let splitPeer = stripPeer.split(":");
-                
-                                            await Peer.create({
-                                                url: peer,
-                                                ipAddress: splitPeer[0],
-                                                port: splitPeer[1],
-                                                lastSeen: Date.now(),
-                                                isActive: true,
-                                                lastHeight: parseInt(jsondata.current_block),
-                                                networkName: globalThis.networkName,
-                                                createdAt: Date.now(),
-                                                updatedAt: Date.now()
-                                            });
-                                        }
-                                        else
-                                        {
-                                            await Peer.updateOne({url: peer}, {$set: {
-                                                lastSeen: Date.now(),
-                                                isActive: true,
-                                                lastHeight: parseInt(jsondata.current_block),
-                                                updatedAt: Date.now()
-                                            }});
-                                        }
-
-                                        delete this.wsRespFunc[messageId];
-
-                                        logger.info("Peer " + peer + ": OK");
-
-                                    } catch (e) {
-    logger.warn(e);
-                                        delete this.wsRespFunc[messageId];
-
-                                        logger.warn("Peer " + peer + ": NOTOK");
-                                    }
-
-                                };
-
-                                try {
-                                    this.websocketPeers[peer].send(JSON.stringify(message));
-                                } catch (e) {
-                                    // could not send message
-                                    logger.warn("Peer " + peer + ": NOTOK");
-                                    logger.warn(e);
-                                    delete this.wsRespFunc[messageId];
-                                    delete this.websocketPeers[peer]
-                                }
-                                
-                            }
-                            else
-                            {
-
-                                delete this.websocketPeers[peer];
-
-                            }
-
-                        }
-                        else
-                        {
-                            // Try to connect socket
-                            try {
-
-                                var that = this;
-
-                                const client = new WebSocket(peer.replace("http://", "ws://"), {handshakeTimeout: 3000, timeout: 3000});
-
-                                client.on('error', console.error);
-
-                                client.on('open', function open() {
-
-                                    that.websocketPeers[peer] = client;
-
-                                    // peer notify
-                                    const messageId2 = that.stringToHex(peer) + "." + uuidv4();
-
-                                    const message2 = {
-                                        method: 'peerNotify',
-                                        hostname: that.myIpAddress,
-                                        port: globalThis.appPort
-                                    };
-
-                                    try {
-                                        that.websocketPeers[peer].send(JSON.stringify(message2));
-                                    } catch (e) {
-                                        // could not send message
-                                    }
-
-                                
-
-
-
-
-                                    // get stats
-
-                                    const messageId = that.stringToHex(peer) + "." + uuidv4();
-
-                                    const message = {
-                                        method: 'getStats',
-                                        messageId: messageId
-                                    };
-
-                                    that.wsRespFunc[messageId] = async (peer: string, messageId: string, data: string) => {
-
-                                        try {
-
-                                            const jsonparse = JSON.parse(data);
-                                            const jsondata = jsonparse.data;
-
-                                            if (!jsondata || parseInt(jsondata.current_block) === 0) throw new Error('Bad Peer');
-
-                                            if (jsondata.network_name != globalThis.networkName) throw new Error('Bad Peer NetworkName');
-
-                                            that.peerVersions[peer] = 2; // assumed since this is ws
-                    
-                                            if (!that.activePeers.includes(peer))
-                                            {
-                                                that.activePeers.push(peer);
-                                            }
-
-                                            that.peerHeights[peer] = parseInt(jsondata.current_block);
-                    
-                                            const havePeer = await Peer.countDocuments({url: peer});
-                
-                                            if (havePeer == 0)
-                                            {
-                    
-                                                let stripPeer = peer.replace('http://', '');
-                                                let splitPeer = stripPeer.split(":");
-                    
-                                                await Peer.create({
-                                                    url: peer,
-                                                    ipAddress: splitPeer[0],
-                                                    port: splitPeer[1],
-                                                    lastSeen: Date.now(),
-                                                    isActive: true,
-                                                    lastHeight: parseInt(jsondata.current_block),
-                                                    networkName: globalThis.networkName,
-                                                    createdAt: Date.now(),
-                                                    updatedAt: Date.now()
-                                                });
-                    
-                                            }
-                                            else if (havePeer > 1)
-                                            {
-                                                await Peer.deleteMany({url: peer});
-            
-                                                let stripPeer = peer.replace('http://', '');
-                                                let splitPeer = stripPeer.split(":");
-                    
-                                                await Peer.create({
-                                                    url: peer,
-                                                    ipAddress: splitPeer[0],
-                                                    port: splitPeer[1],
-                                                    lastSeen: Date.now(),
-                                                    isActive: true,
-                                                    lastHeight: parseInt(jsondata.current_block),
-                                                    networkName: globalThis.networkName,
-                                                    createdAt: Date.now(),
-                                                    updatedAt: Date.now()
-                                                });
-                                            }
-                                            else
-                                            {
-                                                await Peer.updateOne({url: peer}, {$set: {
-                                                    lastSeen: Date.now(),
-                                                    isActive: true,
-                                                    lastHeight: parseInt(jsondata.current_block),
-                                                    updatedAt: Date.now()
-                                                }});
-                                            }
-
-                                            logger.info("Peer " + peer + ": OK");
-
-                                            if (!that.activePeers.includes(peer))
-                                            {
-                                                that.activePeers.push(peer);
-                                            }
-
-                                            delete that.wsRespFunc[messageId];
-
-                                        } catch (e) {
-    logger.warn(e);
-                                            logger.warn("Peer " + peer + ": NOTOK");
-                                            delete that.wsRespFunc[messageId];
-                                        }
-
-                                    };
-
-                                    try {
-                                        that.websocketPeers[peer].send(JSON.stringify(message));
-                                    } catch (e) {
-                                        logger.warn("Peer " + peer + ": NOTOK");
-                                        logger.warn(e);
-                                        delete that.wsRespFunc[messageId];
-                                        delete that.websocketPeers[peer]
-                                    }
-
-                                });
-                                
-                                client.on('message', function message(data) {
-
-                                    try {
-
-                                        const jsondata = JSON.parse(data.toString());
-                                        if (that.wsRespFunc[jsondata.messageId])
-                                        {
-
-                                            that.wsRespFunc[jsondata.messageId](peer, jsondata.messageId, data.toString());
-
-                                        }
-
-                                    } catch (e) {
-
-    logger.warn(e);
-
-                                    }
-                                });
-
-                                client.on('close', async function close() {
-
-                                    logger.warn('Websocket disconnected from peer: ' + peer);
-
-                                    delete that.websocketPeers[peer];
-
-                                    that.removeActivePeer(peer);
-
-                                    await Peer.updateOne({url: peer}, {$set: {isActive: false, updatedAt: Date.now()}});
-
-                                    // cleanup any open respfunc
-                                    const peerHex = that.stringToHex(peer);
-
-                                    const functionKeys = Object.keys(that.wsRespFunc);
-
-                                    for (let i = 0; i < functionKeys.length; i++)
-                                    {
-                                        let thisKey = functionKeys[i];
-
-                                        if (thisKey.indexOf(peerHex) === 0)
-                                        {
-                                            delete that.wsRespFunc[thisKey];
-                                        }
-
-                                    }
-
-                                });
-
-                            } catch (e) {
-
-                                logger.warn("Peer " + peer + ": NOTOK");
-                                logger.warn(e);
-                                delete this.websocketPeers[peer]
-
-                            }
-
-                        }
-
-                    }
-                    else // PEER VERSION 1 or Unknown version
-                    {
-
-                        try {
-
-                            const response = await axios.get(peer + "/stats");
-                            const data = response.data;
-
-                            if (!data || parseInt(data.current_block) === 0) {
-                                throw new Error('Bad Peer');
-                            }
-
-                            if (data.network_name && data.network_name != globalThis.networkName) {
-                                throw new Error('Bad Peer NetworkName');
-                            }
-
-                            if (data && data.node_version)
-                            {
-                                let splitVersion = data.node_version.split(".");
-                                if (parseInt(splitVersion[0]) >= 2)
-                                {
-                                    this.peerVersions[peer] = 2;
-                                }
-                            }
-                            else
-                            {
-                                this.peerVersions[peer] = 1;
-                            }
-
-                            logger.info("Peer " + peer + ": OK");
-
-                            if (!this.activePeers.includes(peer))
-                            {
-                                this.activePeers.push(peer);
-                            }
-
-                            this.peerHeights[peer] = parseInt(data.current_block);
-
-                            const havePeer = await Peer.countDocuments({url: peer});
-            
-                            if (havePeer === 0)
-                            {
-
-                                let stripPeer = peer.replace('http://', '');
-                                let splitPeer = stripPeer.split(":");
-
-                                await Peer.create({
-                                    url: peer,
-                                    ipAddress: splitPeer[0],
-                                    port: splitPeer[1],
-                                    lastSeen: Date.now(),
-                                    isActive: true,
-                                    lastHeight: parseInt(data.current_block),
-                                    networkName: globalThis.networkName,
-                                    createdAt: Date.now(),
-                                    updatedAt: Date.now()
-                                });
-
-                            }
-                            else if (havePeer > 1)
-                            {
-                                // too many records for same peer.  flush all and recreate
-
-                                await Peer.deleteMany({url: peer});
-
-                                let stripPeer = peer.replace('http://', '');
-                                let splitPeer = stripPeer.split(":");
-
-                                await Peer.create({
-                                    url: peer,
-                                    ipAddress: splitPeer[0],
-                                    port: splitPeer[1],
-                                    lastSeen: Date.now(),
-                                    isActive: true,
-                                    lastHeight: parseInt(data.current_block),
-                                    networkName: globalThis.networkName,
-                                    createdAt: Date.now(),
-                                    updatedAt: Date.now()
-                                });
-                            }
-                            else
-                            {
-                                await Peer.updateOne({url: peer}, {$set: {
-                                    lastSeen: Date.now(),
-                                    isActive: true,
-                                    lastHeight: parseInt(data.current_block),
-                                    updatedAt: Date.now()
-                                }});
-                            }                        
-
-                        } catch (e) {
-
-                            //console.log(e);
-
-                            logger.warn("Peer " + peer + ": NOTOK");
-
-                            await Peer.updateMany({url: peer}, {$set: {isActive: false, updatedAt: Date.now()}});
-
-                            // peer timeout or some other issue - remove until somebody tells us its active again
-
-                            this.removeActivePeer(peer);
-                            
-                        }
-
-                    }
-
-                }
-
-            });
+            await Promise.all(allPromises);
 
             this.checkingPeers = false;
             this.checkPeerLock = 0;
@@ -1335,7 +1349,6 @@ export class PandaniteJobs{
 
     }
 
-    // needs refactor
     public async findPeers(): Promise<boolean>  {
 
         return new Promise<boolean>(async (resolve, reject) => {
