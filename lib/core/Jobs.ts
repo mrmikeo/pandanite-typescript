@@ -1755,8 +1755,8 @@ logger.warn(e);
 
                     let pendingAmounts = {};
 
-                    // Check Balances - excluded for block height < 510,000 as there are a few transactions that do not pass this test
-                    if (block.id > 530000)
+                    // Check Balances - excluded for block height < V2 starting height as there are a few transactions that do not pass this test
+                    if (block.id > 600000)
                     for (let i = 0; i < block.transactions.length; i++)
                     {
                         const thisTrx = block.transactions[i];
@@ -2084,75 +2084,99 @@ logger.warn(e);
 
     }
 
-    private async updateDifficulty() {
+    private async updateDifficulty(): Promise<any> {
 
-        if (this.myBlockHeight <= Constants.DIFFICULTY_LOOKBACK * 2) return false;
-        if (this.myBlockHeight % Constants.DIFFICULTY_LOOKBACK !== 0) return false;
+        return new Promise<any>(async (resolve, reject) => {
 
-        const firstID: number = this.myBlockHeight - Constants.DIFFICULTY_LOOKBACK;
-        const lastID: number = this.myBlockHeight;
-        const first = await Block.findOne({height: firstID});
-        const last = await Block.findOne({height: lastID});
+            try {
 
-        if (!first || !last) return false;
+                if (this.myBlockHeight <= Constants.DIFFICULTY_LOOKBACK * 2) resolve(false);
+                if (this.myBlockHeight % Constants.DIFFICULTY_LOOKBACK !== 0) resolve(false);
 
-        const elapsed: number = last.timestamp - first.timestamp;
-        const numBlocksElapsed: number = lastID - firstID;
-        const target: number = numBlocksElapsed * Constants.DESIRED_BLOCK_TIME_SEC;
-        const difficulty: number = last.difficulty;
-        this.difficulty = PandaniteCore.computeDifficulty(difficulty, elapsed, target);
-    
-        if (
-          this.myBlockHeight >= Constants.PUFFERFISH_START_BLOCK &&
-          this.myBlockHeight < Constants.PUFFERFISH_START_BLOCK + Constants.DIFFICULTY_LOOKBACK * 2
-        ) {
-          this.difficulty = Constants.MIN_DIFFICULTY;
-        }
+                const firstID: number = this.myBlockHeight - Constants.DIFFICULTY_LOOKBACK;
+                const lastID: number = this.myBlockHeight;
+                const first = await Block.findOne({height: firstID});
+                const last = await Block.findOne({height: lastID});
 
-        logger.info("New Difficulty: " + this.difficulty);
+                if (!first || !last) resolve(false);
 
-        return true;
+                const elapsed: number = last.timestamp - first.timestamp;
+                const numBlocksElapsed: number = lastID - firstID;
+                const target: number = numBlocksElapsed * Constants.DESIRED_BLOCK_TIME_SEC;
+                const difficulty: number = last.difficulty;
+                this.difficulty = PandaniteCore.computeDifficulty(difficulty, elapsed, target);
+            
+                if (
+                this.myBlockHeight >= Constants.PUFFERFISH_START_BLOCK &&
+                this.myBlockHeight < Constants.PUFFERFISH_START_BLOCK + Constants.DIFFICULTY_LOOKBACK * 2
+                ) {
+                this.difficulty = Constants.MIN_DIFFICULTY;
+                }
+
+                logger.info("New Difficulty: " + this.difficulty);
+
+                resolve(true);
+
+            } catch (e) {
+
+                resolve(false);
+                
+            }
+
+        });
 
     }
 
-    private async updateDifficultyForHeight(height: number) {
+    private async updateDifficultyForHeight(height: number): Promise<any> {
 
-        if (height <= Constants.DIFFICULTY_LOOKBACK * 2) return false;
-        if (height % Constants.DIFFICULTY_LOOKBACK !== 0) return false;
+        return new Promise<any>(async (resolve, reject) => {
 
-        const firstID: number = height - Constants.DIFFICULTY_LOOKBACK;
-        const lastID: number = height;
-        const first = await Block.findOne({height: firstID});
-        const last = await Block.findOne({height: lastID});
+            try {
 
-        if (!first)
-        {
-            logger.info("Could not find first block: " + firstID);
-            return false;
-        }
+                if (height <= Constants.DIFFICULTY_LOOKBACK * 2) resolve(false);
+                if (height % Constants.DIFFICULTY_LOOKBACK !== 0) resolve(false);
 
-        if (!last)
-        {
-            logger.info("Could not find last block: " + lastID);
-            return false;
-        }
+                const firstID: number = height - Constants.DIFFICULTY_LOOKBACK;
+                const lastID: number = height;
+                const first = await Block.findOne({height: firstID});
+                const last = await Block.findOne({height: lastID});
 
-        const elapsed: number = last.timestamp - first.timestamp;
-        const numBlocksElapsed: number = lastID - firstID;
-        const target: number = numBlocksElapsed * Constants.DESIRED_BLOCK_TIME_SEC;
-        const difficulty: number = last.difficulty;
-        this.difficulty = PandaniteCore.computeDifficulty(difficulty, elapsed, target);
-    
-        if (
-            height >= Constants.PUFFERFISH_START_BLOCK &&
-            height < Constants.PUFFERFISH_START_BLOCK + Constants.DIFFICULTY_LOOKBACK * 2
-        ) {
-            this.difficulty = Constants.MIN_DIFFICULTY;
-        }
+                if (!first)
+                {
+                    logger.info("Could not find first block: " + firstID);
+                    resolve(false);
+                }
 
-        logger.info("New Difficulty: " + this.difficulty);
+                if (!last)
+                {
+                    logger.info("Could not find last block: " + lastID);
+                    resolve(false);
+                }
 
-        return true;
+                const elapsed: number = last.timestamp - first.timestamp;
+                const numBlocksElapsed: number = lastID - firstID;
+                const target: number = numBlocksElapsed * Constants.DESIRED_BLOCK_TIME_SEC;
+                const difficulty: number = last.difficulty;
+                this.difficulty = PandaniteCore.computeDifficulty(difficulty, elapsed, target);
+            
+                if (
+                    height >= Constants.PUFFERFISH_START_BLOCK &&
+                    height < Constants.PUFFERFISH_START_BLOCK + Constants.DIFFICULTY_LOOKBACK * 2
+                ) {
+                    this.difficulty = Constants.MIN_DIFFICULTY;
+                }
+
+                logger.info("New Difficulty: " + this.difficulty);
+
+                resolve(true);
+
+            } catch (e) {
+
+                resolve(false);
+                
+            }
+
+        });
 
     }
 
