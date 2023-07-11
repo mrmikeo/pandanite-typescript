@@ -7,7 +7,7 @@ import { Constants } from "./Constants"
 import * as minimist from 'minimist';
 import * as WebSocket from 'ws';
 import { v4 as uuidv4 } from 'uuid';
-
+import { setIntervalAsync, clearIntervalAsync } from 'set-interval-async';
 import { createLogger, format, transports } from 'winston';
 
 const { combine, timestamp, label, printf } = format;
@@ -383,15 +383,30 @@ export class PandaniteJobs{
 
         //this.checkLocks();
 
-        this.checkPeers();
+        // Check Peers Every 30s
+        setIntervalAsync(async () => {
+            await this.checkPeers();
+        }, 30000);
 
-        this.findPeers();
+        // Find New Peers Every 60s
+        setIntervalAsync(async () => {
+            await this.findPeers();
+        }, 60000);
 
-        this.printPeeringInfo();
+        // Print Peering Info Every 30s
+        setIntervalAsync(async () => {
+            await this.printPeeringInfo();
+        }, 30000);
 
-        this.downloadBlocks();
+        // Download any new blocks every 1s
+        setIntervalAsync(async () => {
+            await this.downloadBlocks();
+        }, 1000);
 
-        this.syncBlocks();
+        // Sync Downloaded Blocks Every 1s
+        setIntervalAsync(async () => {
+            await this.syncBlocks();
+        }, 1000);
 
     }
 
@@ -841,10 +856,6 @@ export class PandaniteJobs{
         }
 
         logger.info("-----------------------------------");
-
-        setTimeout(() => {
-            this.printPeeringInfo();
-        },30000);
 
         return true;
 
@@ -1315,10 +1326,6 @@ logger.warn(e);
         this.checkingPeers = false;
         this.checkPeerLock = 0;
 
-        setTimeout(() => {
-            this.checkPeers();
-        },30000);
-
         return true;
 
     }
@@ -1450,10 +1457,6 @@ logger.warn(e);
         this.findingPeers = false;
         this.findPeerLock = 0;
 
-        setTimeout(() => {
-            this.findPeers();
-        },60000);
-
         return true;
 
     }
@@ -1510,10 +1513,6 @@ logger.warn(e);
 
         }
 
-        setTimeout(() => {
-            this.downloadBlocks();
-        },1000);
-
         return true;
     }
 
@@ -1525,12 +1524,12 @@ logger.warn(e);
         this.syncingBlocks = true;
         this.syncBlocksLock = Date.now();
 
-        let dlBlockKeys = Object.keys(this.downloadedBlocks);
+        const downloadedBlockKeys = Object.keys(this.downloadedBlocks);
 
         // cleanup
-        for (let i = 0; i < dlBlockKeys.length; i++)
+        for (let i = 0; i < downloadedBlockKeys.length; i++)
         {
-            let thisKey = parseInt(dlBlockKeys[i]);
+            let thisKey = parseInt(downloadedBlockKeys[i]);
             if (thisKey < this.myBlockHeight)
             {
                 delete this.downloadedBlocks[thisKey];
@@ -1577,10 +1576,6 @@ logger.warn(e);
         globalThis.safeToShutDown = true;
         this.syncingBlocks = false;
         this.syncBlocksLock = 0;
-
-        setTimeout(() => {
-            this.syncBlocks();
-        },1000);
 
         return true;
 
