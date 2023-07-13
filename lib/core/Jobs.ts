@@ -884,6 +884,7 @@ export class PandaniteJobs{
             if (this.badPeers.includes(peer))
             {
                 resolve(false);
+                return;
             }
 
             let stripPeer = peer.replace('http://', '');
@@ -896,6 +897,7 @@ export class PandaniteJobs{
                 await Peer.updateMany({url: peer}, {$set: {isActive: false, updatedAt: Date.now()}});
                 this.removeActivePeer(peer);
                 resolve(false);
+                return;
             }
 
             if (!["localhost", "127.0.0.1", this.myIpAddress].includes(splitPeer[0])) // don't peer with yourself.
@@ -1337,6 +1339,7 @@ logger.info("checking peer " + peer);
             }
 
             resolve(true);
+            return;
 
         });
 
@@ -1387,6 +1390,7 @@ logger.info("checking peer " + peer);
             this.checkPeerLock = 0;
 
             resolve(true);
+            return;
 
         });
 
@@ -1465,6 +1469,7 @@ logger.info("checking peer " + peer);
             this.findPeerLock = 0;
 
             resolve(true);
+            return;
 
         });
 
@@ -1499,7 +1504,13 @@ logger.info("checking peer " + peer);
 
                 logger.info("Found new peer " + url);
 
+                resolve(true);
+                return;
+
             }
+
+            resolve(false);
+            return;
 
         });
 
@@ -1544,6 +1555,7 @@ logger.info("checking peer " + peer);
             this.downloadingBlocks = false;
 
             resolve(true);
+            return;
 
         });
 
@@ -1613,6 +1625,7 @@ logger.info("checking peer " + peer);
             this.syncBlocksLock = 0;
 
             resolve(true);
+            return;
 
         });
 
@@ -1661,6 +1674,7 @@ logger.info("checking peer " + peer);
                     await this.updateDifficultyForHeight(lastDiffHeight);
         
                     resolve(true);
+                    return;
 
                 } catch (e) {
 
@@ -1715,6 +1729,7 @@ logger.info("checking peer " + peer);
                 await this.updateDifficultyForHeight(lastDiffHeight);
     
                 resolve(true);
+                return;
 
             }
 
@@ -1742,6 +1757,7 @@ logger.info("checking peer " + peer);
                     if (block.id != expectedHeight)
                     {
                         reject('Invalid Block. Unexpected Height');
+                        return;
                     }
 
                     let medianTimestamp = 0;
@@ -1778,6 +1794,7 @@ logger.info("checking peer " + peer);
                     } catch (e) {
                         logger.warn(e);
                         reject(e);
+                        return;
                     }
 
                     // Poor previous design requires this in order to sync :(
@@ -1945,6 +1962,7 @@ logger.info("checking peer " + peer);
                     } catch (e) {
                         logger.warn(e);
                         reject(e);
+                        return;
                     }
 
                 }
@@ -2085,6 +2103,7 @@ logger.info("checking peer " + peer);
 
                             logger.warn(e);
                             reject(e);
+                            return;
 
                         }
 
@@ -2101,6 +2120,7 @@ logger.info("checking peer " + peer);
                     logger.info("Imported Block #" + block.id);
 
                     resolve(true);
+                    return;
 
                 }
                 else
@@ -2114,11 +2134,13 @@ logger.info("checking peer " + peer);
                     this.removeActivePeer(block.receivedFromPeer);
 
                     reject('Invalid Block.');
+                    return;
                 }
 
             } catch (e) {
 
                 reject(e);
+                return;
 
             }
 
@@ -2135,6 +2157,7 @@ logger.info("checking peer " + peer);
             await this.updateDifficultyForHeight(lastDiffHeight);
 
             resolve(true);
+            return;
 
         });
 
@@ -2146,8 +2169,15 @@ logger.info("checking peer " + peer);
 
             try {
 
-                if (height <= Constants.DIFFICULTY_LOOKBACK * 2) resolve(false);
-                if (height % Constants.DIFFICULTY_LOOKBACK !== 0) resolve(false);
+                if (height <= Constants.DIFFICULTY_LOOKBACK * 2) {
+                    resolve(false);
+                    return;
+                }
+
+                if (height % Constants.DIFFICULTY_LOOKBACK !== 0) {
+                    resolve(false);
+                    return;
+                }
 
                 const firstID: number = height - Constants.DIFFICULTY_LOOKBACK;
                 const lastID: number = height;
@@ -2158,12 +2188,14 @@ logger.info("checking peer " + peer);
                 {
                     logger.info("Could not find first block: " + firstID);
                     resolve(false);
+                    return;
                 }
 
                 if (!last)
                 {
                     logger.info("Could not find last block: " + lastID);
                     resolve(false);
+                    return;
                 }
 
                 const elapsed: number = last.timestamp - first.timestamp;
@@ -2182,10 +2214,12 @@ logger.info("checking peer " + peer);
                 logger.info("New Difficulty: " + this.difficulty);
 
                 resolve(true);
+                return;
 
             } catch (e) {
 
                 resolve(false);
+                return;
                 
             }
 
@@ -2200,17 +2234,20 @@ logger.info("checking peer " + peer);
           const timer = setTimeout(() => {
             socket.destroy();
             resolve(false);
+            return;
           }, 2000);
 
           socket.on('connect', () => {
             clearTimeout(timer);
             socket.destroy();
             resolve(true);
+            return;
           });
       
           socket.on('error', () => {
             clearTimeout(timer);
             resolve(false);
+            return;
           });
       
           socket.connect(port, ip);
@@ -2227,6 +2264,7 @@ logger.info("checking peer " + peer);
             request.destroy();
             console.log(url + " returned " + res.statusCode);
             reject("Error Code " + res.statusCode);
+            return;
           }
 
           res.on('data', (chunk) => {
@@ -2237,19 +2275,23 @@ logger.info("checking peer " + peer);
             try {
               const jsonData = JSON.parse(data);
               resolve(jsonData);
+              return;
             } catch (error) {
               reject(error);
+              return;
             }
           });
         });
     
         request.on('error', (error) => {
           reject(error);
+          return;
         });
 
         setTimeout(() => {
             request.destroy();
             reject(new Error('Request timed out'));
+            return;
         }, 3000);
 
       });
@@ -2265,6 +2307,7 @@ logger.info("checking peer " + peer);
                 request.destroy();
                 console.log(url + " returned " + res.statusCode);
                 reject("Error Code " + res.statusCode);
+                return;
             }
 
             res.on('data', (chunk) => {
@@ -2275,19 +2318,23 @@ logger.info("checking peer " + peer);
               try {
                 const stringData = data;
                 resolve(stringData);
+                return;
               } catch (error) {
                 reject(error);
+                return;
               }
             });
           });
       
           request.on('error', (error) => {
             reject(error);
+            return;
           });
 
           setTimeout(() => {
             request.destroy();
             reject(new Error('Request timed out'));
+            return;
           }, 3000);
 
         });

@@ -159,6 +159,7 @@ export class PandaniteCore{
             if (block.id != lastBlockHeight + 1)
             {
                 reject("Invalid Block Height: " + block.id);
+                return;
             }
 
             // Check block reward
@@ -168,6 +169,7 @@ export class PandaniteCore{
                 if (expectedReward !==  blockReward)
                 {
                     reject("Invalid Block Reward: " + blockReward + ", Expected: " + expectedReward);
+                    return;
                 }
             }
 
@@ -176,12 +178,14 @@ export class PandaniteCore{
             if (blockTxSize > Constants.MAX_TRANSACTIONS_PER_BLOCK)
             {
                 reject("Invalid Transaction Count: " + blockTxSize);
+                return;
             }
 
             // Validate Block Difficulty
             if (block.difficulty != expectedDifficulty)
             {
                 reject("Invalid Block Difficulty: " + block.difficulty + ", Expected: " + expectedDifficulty);
+                return;
             }
 
             // Validate Block Time
@@ -192,6 +196,7 @@ export class PandaniteCore{
                 if (block.timestamp > maxTime)
                 {
                     reject("Block Timestamp Too Far Into Future");
+                    return;
                 }
               
                 // block must be after the median timestamp of last 10 blocks
@@ -199,6 +204,7 @@ export class PandaniteCore{
                     if (block.timestamp < medianTimestamp)
                     {
                         reject("Block Timestamp Too Old");
+                        return;
                     }
                 }
             }
@@ -211,6 +217,7 @@ export class PandaniteCore{
                 if (isValid === false) 
                 {
                     reject("checkBlockHash failed at Validate Transaction");
+                    return;
                 }
             }
 
@@ -220,6 +227,7 @@ export class PandaniteCore{
 
             if (expectedMerkleHash !== actualMerkleHash) {
                 reject("checkBlockHash failed at Validate MerkleTree " + actualMerkleHash + " != " + expectedMerkleHash);
+                return;
             }
 
             // Validate Blockhash
@@ -229,6 +237,7 @@ export class PandaniteCore{
             if (expectedBlockHash !== actualBlockHash) {
                 console.log(JSON.stringify(block, null, 2));
                 reject("checkBlockHash failed at Validate Blockhash " + actualBlockHash + " != " + expectedBlockHash);
+                return;
             }
 
             // Check Nonce
@@ -236,9 +245,11 @@ export class PandaniteCore{
             if (validNonce === false)
             {
                 reject("Invalid Block Nonce: " + block.nonce);
+                return;
             }
 
             resolve(true);
+            return;
 
         });
 
