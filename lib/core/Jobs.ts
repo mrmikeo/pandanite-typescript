@@ -140,6 +140,7 @@ class QueueProcessor {
 
           const nextInQueue = this.queue.getNextItem();
 
+          // Only use workers that are above this height
           for (let i = 0; i < availableWorkers.length; i++)
           {
             const thisPeer = availableWorkers[i][0];
@@ -149,8 +150,6 @@ class QueueProcessor {
             }
           }
     
-//console.log(workersForHeight);
-
           if (workersForHeight.length === 0) {
             await new Promise<void>((resolve) => setTimeout(resolve, 10)); // Wait for available workers
             continue; // No available workers, so skip to next iteration
@@ -192,9 +191,7 @@ class QueueProcessor {
                 // what version is this peer? can we do ws?
                 if (that.websocketPeers[thisPeer])
                 {
-
                     // get block via websocket
-
                     const messageId = that.stringToHex(thisPeer) + "." + uuidv4();
 
                     const message = {
@@ -1578,9 +1575,6 @@ logger.info("checking peer " + peer);
                 this.downloadingBlocks = false;
                 return resolve(false);
             }
-
-logger.info("try download blocks " + start + " to " + end);
-logger.info("workers: " + this.queueProcessor.countWorkers());
 
             for (let i = start; i <= end; i++)
             {

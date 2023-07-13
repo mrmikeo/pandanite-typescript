@@ -8,7 +8,7 @@ DO NOT TRY TO USE THIS UNLESS YOU ARE PART OF THE TESTING TEAM.  THIS PROGRAM IS
 
 https://www.digitalocean.com/community/tutorials/how-to-install-mongodb-on-ubuntu-20-04
 
-## Install NodeJS (Version 20)
+## Install NodeJS (Version 20 was used in development)
 
 https://www.digitalocean.com/community/tutorials/how-to-install-node-js-on-ubuntu-22-04#option-3-installing-node-using-the-node-version-manager
 
