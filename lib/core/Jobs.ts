@@ -2228,7 +2228,13 @@ logger.info("checking peer " + peer);
 
         request = http.get(url, (res) => {
           let data = '';
-    
+
+          if (res.statusCode != 200) {
+            request.destroy();
+            console.log(url + " returned " + res.statusCode);
+            reject("Error Code " + res.statusCode);
+          }
+
           res.on('data', (chunk) => {
             data += chunk;
           });
@@ -2247,10 +2253,6 @@ logger.info("checking peer " + peer);
           reject(error);
         });
     
-        setTimeout(() => {
-          request.destroy();
-          reject(new Error('Request timed out'));
-        }, 3000);
       });
     }
     
@@ -2266,7 +2268,13 @@ logger.info("checking peer " + peer);
 
           request = http.get(url, (res) => {
             let data = '';
-      
+
+            if (res.statusCode != 200) {
+                request.destroy();
+                console.log(url + " returned " + res.statusCode);
+                reject("Error Code " + res.statusCode);
+            }
+
             res.on('data', (chunk) => {
               data += chunk;
             });
