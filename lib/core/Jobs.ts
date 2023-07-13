@@ -96,8 +96,10 @@ class QueueProcessor {
     private queue: AsyncQueue;
     private workers: Map<string, boolean>;
     private workerFunction: Worker;
+    private that: any;
   
     constructor(that) {
+      this.that = that;
       this.queue = new AsyncQueue();
       this.workers = new Map<string, boolean>();
       this.workerFunction = this.defaultWorkerFunction;
@@ -129,15 +131,25 @@ class QueueProcessor {
           const availableWorkers = Array.from(this.workers.entries()).filter(
             ([_, isWorking]) => !isWorking
           );
+
+          let workersForHeight = [];
+
+          for (let i = 0; i < availableWorkers.length; i++)
+          {
+            if (this.that.getPeerHeight(availableWorkers[i]) >= that)
+            {
+                workersForHeight.push(availableWorkers[i]);
+            }
+          }
     
-          if (availableWorkers.length === 0) {
+          if (workersForHeight.length === 0) {
             await new Promise<void>((resolve) => setTimeout(resolve, 10)); // Wait for available workers
             continue; // No available workers, so skip to next iteration
           }
     
           const item = await this.queue.dequeue(); // Dequeue item
     
-          const [hostname] = availableWorkers[Math.floor(Math.random() * availableWorkers.length)]; // Select a random available worker
+          const [hostname] = workersForHeight[Math.floor(Math.random() * workersForHeight.length)]; // Select a random available worker
           this.workers.set(hostname, true); // Mark the worker as busy
     
           this.workerFunction(that, hostname, item).then(() => {
@@ -250,7 +262,6 @@ class QueueProcessor {
             else
             {
 
-                that.removeActivePeer(thisPeer);
                 delete that.downloadedBlocks[height];
                 that.queueProcessor.requeue(height);
 
@@ -312,6 +323,11 @@ export class PandaniteJobs{
         this.websocketPeers = {}; // v2 peers only
         this.wsRespFunc = {}; // v2 peers only
         this.myIpAddress = "127.0.0.1";
+    }
+
+    public getPeerHeight(peer: string)
+    {
+        return this.peerHeights[peer] || 0;
     }
 
     public async startBlockchain()  {
