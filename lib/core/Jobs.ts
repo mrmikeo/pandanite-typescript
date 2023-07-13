@@ -120,6 +120,10 @@ class QueueProcessor {
         return this.workers.has(hostname);
     }
 
+    countWorkers(): number {
+        return this.workers.size;
+    }
+
     async processQueue(that: number): Promise<void> {
         while (true) {
           const availableWorkers = Array.from(this.workers.entries()).filter(
@@ -1535,6 +1539,9 @@ logger.info("checking peer " + peer);
             if (maxHeight === 0) return resolve(false);
 
             if (maxHeight < end) end = maxHeight;
+
+logger.info("try download blocks " + start + " to " + end);
+logger.info("workers: " + this.queueProcessor.countWorkers());
 
             for (let i = start; i <= end; i++)
             {
