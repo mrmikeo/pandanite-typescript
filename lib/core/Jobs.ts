@@ -221,7 +221,7 @@ class QueueProcessor {
                         that.websocketPeers[thisPeer].send(JSON.stringify(message));
                     } catch (e) {
                         logger.warn(e);
-                        that.removeActivePeer(peer);
+                        that.removeActivePeer(thisPeer);
                         delete that.wsRespFunc[messageId];
                         delete that.websocketPeers[thisPeer];
                         that.queueProcessor.requeue(height);
@@ -239,7 +239,7 @@ class QueueProcessor {
                     }
                     else
                     {
-                        that.removeActivePeer(peer);
+                        that.removeActivePeer(thisPeer);
                         delete that.downloadedBlocks[height];
                         that.queueProcessor.requeue(height);
                     }
@@ -250,7 +250,7 @@ class QueueProcessor {
             else
             {
 
-                that.removeActivePeer(peer);
+                that.removeActivePeer(thisPeer);
                 delete that.downloadedBlocks[height];
                 that.queueProcessor.requeue(height);
 
