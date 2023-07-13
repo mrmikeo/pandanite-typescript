@@ -1,5 +1,4 @@
 import { PandaniteCore } from './Core'
-import axios from 'axios';
 import * as mongoose from 'mongoose';
 import { transactionSchema, addressSchema, balanceSchema, tokenSchema, blockSchema, peerSchema, mempoolSchema } from '../models/Model';
 import Big from 'big.js';
@@ -9,6 +8,9 @@ import * as WebSocket from 'ws';
 import { v4 as uuidv4 } from 'uuid';
 import { setIntervalAsync, clearIntervalAsync } from 'set-interval-async';
 import { createLogger, format, transports } from 'winston';
+import * as net from 'net';
+import * as http from 'http';
+
 
 const { combine, timestamp, label, printf } = format;
 
@@ -33,13 +35,11 @@ const Block = mongoose.model('Block', blockSchema);
 const Peer = mongoose.model('Peer', peerSchema);
 const Mempool = mongoose.model('Mempool', mempoolSchema);
 
-axios.defaults.timeout = 3000;
-
 /***
  * This queue is for downloading the blockchain, but can be used for any purpose that requires a queue with one or more workers
  */
-class AsyncQueue<T> {
-    private queue: T[];
+class AsyncQueue {
+    private queue: number[];
     private enqueuePromise: Promise<void> | null;
     private enqueueResolve: (() => void) | null;
   
@@ -49,7 +49,7 @@ class AsyncQueue<T> {
       this.enqueueResolve = null;
     }
   
-    enqueue(item: T): Promise<void> {
+    enqueue(item: number): Promise<void> {
       return new Promise<void>((resolve) => {
         this.queue.push(item);
         if (this.enqueueResolve) {
@@ -59,7 +59,7 @@ class AsyncQueue<T> {
       });
     }
 
-    requeue(item: T): Promise<void> {
+    requeue(item: number): Promise<void> {
         return new Promise<void>((resolve) => {
           this.queue.unshift(item);
           if (this.enqueueResolve) {
@@ -69,7 +69,7 @@ class AsyncQueue<T> {
         });
       }
 
-    async dequeue(): Promise<T> {
+    async dequeue(): Promise<number> {
       while (this.queue.length === 0) {
         await new Promise<void>((resolve) => {
           this.enqueueResolve = resolve;
@@ -79,7 +79,7 @@ class AsyncQueue<T> {
       return this.queue.shift()!;
     }
 
-    hasqueue(item: T): boolean {
+    hasqueue(item: number): boolean {
         if (this.queue.indexOf(item) > -1) return true;
         return false;
     }
@@ -89,15 +89,15 @@ class AsyncQueue<T> {
     }
 }
   
-type Worker<T> = (that: any, hostname: string, item: T) => Promise<void>;
+type Worker = (that: any, hostname: string, item: number) => Promise<void>;
 
-class QueueProcessor<T> {
-    private queue: AsyncQueue<T>;
+class QueueProcessor {
+    private queue: AsyncQueue;
     private workers: Map<string, boolean>;
-    private workerFunction: Worker<T>;
+    private workerFunction: Worker;
   
     constructor(that) {
-      this.queue = new AsyncQueue<T>();
+      this.queue = new AsyncQueue();
       this.workers = new Map<string, boolean>();
       this.workerFunction = this.defaultWorkerFunction;
       this.processQueue(that);
@@ -107,7 +107,7 @@ class QueueProcessor<T> {
       this.workers.set(hostname, false);
     }
   
-    addFunction(workerFunction: Worker<T>): void {
+    addFunction(workerFunction: Worker): void {
       this.workerFunction = workerFunction;
     }
   
@@ -119,7 +119,7 @@ class QueueProcessor<T> {
         return this.workers.has(hostname);
     }
 
-    async processQueue(that: T): Promise<void> {
+    async processQueue(that: number): Promise<void> {
         while (true) {
           const availableWorkers = Array.from(this.workers.entries()).filter(
             ([_, isWorking]) => !isWorking
@@ -141,21 +141,21 @@ class QueueProcessor<T> {
         }
     }
   
-    enqueue(item: T): void {
+    enqueue(item: number): void {
       if (!this.queue.hasqueue(item))
         this.queue.enqueue(item);
     }
 
-    requeue(item: T): void {
+    requeue(item: number): void {
         if (!this.queue.hasqueue(item))
           this.queue.requeue(item);
     }
 
-    hasqueue(item: T): boolean {
+    hasqueue(item: number): boolean {
         return this.queue.hasqueue(item);
     }
 
-    private defaultWorkerFunction: Worker<T> = async (that, thisPeer, height) => {
+    private defaultWorkerFunction: Worker = async (that: any, thisPeer: string, height: number) => {
 
         try {
 
@@ -187,18 +187,16 @@ class QueueProcessor<T> {
                             if (jsondata && jsondata.hash)
                             {
 
+                                jsondata.receivedFromPeer = peer;
+
                                 that.downloadedBlocks[height] = jsondata;
                                 delete that.wsRespFunc[messageId];
 
                             }
                             else
                             {
-                                //const index = this.activePeers.indexOf(thisPeer);
-                                //if (index > -1) {
-                                //    this.activePeers.splice(index, index);
-                                //}
+                                that.removeActivePeer(peer);
                                 delete that.downloadedBlocks[height];
-                                //this.queueProcessor.removeWorker(thisPeer);
                                 that.queueProcessor.requeue(height);
                                 delete that.wsRespFunc[messageId];
                             }
@@ -221,17 +219,12 @@ class QueueProcessor<T> {
                 else
                 {
                 
-                    const response = await axios({
-                        url: thisPeer + "/block?blockId=" + height,
-                        method: 'get',
-                        responseType: 'json'
-                    });
-        
-                    const data = response.data;
+                    const data: any = await that.getJSONFromURL(thisPeer + "/block?blockId=" + height);
         
                     if (data && data.hash)
                     {
-                        that.downloadedBlocks[height] = response.data;
+                        data.receivedFromPeer = thisPeer;
+                        that.downloadedBlocks[height] = data;
                     }
                     else
                     {
@@ -260,6 +253,8 @@ class QueueProcessor<T> {
 
         }
 
+        return;
+
     };
 
 
@@ -277,12 +272,12 @@ export class PandaniteJobs{
     syncBlocksLock: number;
     downloadingBlocks: boolean;
     activePeers: Array<string>;
-    pendingPeers: Array<string>;
+    badPeers: Array<string>;
     currentPeer: string;
     downloadedBlocks: Object;
     peerHeights: Object;
     peerVersions: Object;
-    queueProcessor: QueueProcessor<number>;
+    queueProcessor: QueueProcessor;
     myBlockHeight: number;
     difficulty: number;
     websocketPeers: Object;
@@ -291,7 +286,7 @@ export class PandaniteJobs{
 
     constructor() {
         this.activePeers = [];
-        this.pendingPeers = [];
+        this.badPeers = [];
         this.checkingPeers = false;
         this.checkPeerLock = 0;
         this.findingPeers = false;
@@ -303,7 +298,7 @@ export class PandaniteJobs{
         this.downloadedBlocks = {};
         this.peerHeights = {};
         this.peerVersions = {};
-        this.queueProcessor = new QueueProcessor<number>(this);
+        this.queueProcessor = new QueueProcessor(this);
         this.myBlockHeight = 0;
         this.difficulty = 16;
         this.websocketPeers = {}; // v2 peers only
@@ -367,9 +362,9 @@ export class PandaniteJobs{
 
         // get external ip address
         try {
-            const response = await axios.get('http://api.ipify.org/')
-            logger.info("My public IP address is: " + response.data);
-            this.myIpAddress = response.data;
+            const body: string = await this.getStringFromURL('http://api.ipify.org/');
+            logger.info("My public IP address is: " + body);
+            this.myIpAddress = body;
         } catch (e) {}
 
         const lastDiffHeight = Math.floor(height/Constants.DIFFICULTY_LOOKBACK)*Constants.DIFFICULTY_LOOKBACK;
@@ -383,34 +378,34 @@ export class PandaniteJobs{
 
         //this.checkLocks();
 
-        // Check Peers Every 30s
+        
+        // Check Peers Every 20s
         setIntervalAsync(async () => {
             await this.checkPeers();
-        }, 30000);
-
-        // Find New Peers Every 30s
-        setIntervalAsync(async () => {
-            await this.findPeers();
-        }, 30000);
-
-        // Print Peering Info Every 30s
-        setIntervalAsync(async () => {
             await this.printPeeringInfo();
-        }, 30000);
+        }, 20000);
 
-        // Download any new blocks every 1s
+        // Find New Peers Every 60s if needed
+        setIntervalAsync(async () => {
+            if (this.activePeers.length > 0 && this.activePeers.length < globalThis.maxPeers)
+            {
+                await this.findPeers();
+            }
+        }, 60000);
+
+        // Download any new blocks every 2s
         setIntervalAsync(async () => {
             await this.downloadBlocks();
-        }, 1000);
+        }, 2000);
 
-        // Sync Downloaded Blocks Every 1s
+        // Sync Downloaded Blocks Every 2s
         setIntervalAsync(async () => {
             await this.syncBlocks();
-        }, 1000);
+        }, 2000);
 
     }
 
-    public removeActivePeer (value: string) { 
+    private removeActivePeer (value: string) { 
     
         let filtered = [];
 
@@ -425,16 +420,32 @@ export class PandaniteJobs{
 
         }
 
+        this.queueProcessor.removeWorker(value);
+
         this.activePeers = JSON.parse(JSON.stringify(filtered));
     }
 
-    public async checkLocks() {
+    private addActivePeer (value: string) { 
+    
+        if (!this.activePeers.includes(value))
+        {
+            this.activePeers.push(value);
+        }
+
+        if (!this.queueProcessor.hasWorker(value))
+        {
+            this.queueProcessor.addWorker(value);
+        }
+
+    }
+
+    private async checkLocks() {
 
         // TODO
 
     }
 
-    public async revalidateBlockchain() {
+    private async revalidateBlockchain() {
 
         logger.warn("Revalidating blockchain...");
 
@@ -622,7 +633,9 @@ export class PandaniteJobs{
 
                 this.myBlockHeight = block.height;
 
-                await this.updateDifficulty();
+                const lastDiffHeight = Math.floor(this.myBlockHeight/Constants.DIFFICULTY_LOOKBACK)*Constants.DIFFICULTY_LOOKBACK;
+
+                await this.updateDifficultyForHeight(lastDiffHeight);
 
                 lastBlockHash = block.blockHash;
                 lastBlockHeight = block.height;
@@ -651,7 +664,7 @@ export class PandaniteJobs{
 
     }
 
-    public async checkMempool() {
+    private async checkMempool() {
 
         // General mempool check to make sure items in the pool are still valid
         // This might be overkill since we will do the same check when adding to mempool, so this function may only need to run on first starting after sync is finished.
@@ -832,7 +845,7 @@ export class PandaniteJobs{
 
     }
 
-    public stringToHex(str: string) {
+    private stringToHex(str: string) {
         let hexString = '';
         for (let i = 0; i < str.length; i++) {
           const hex = str.charCodeAt(i).toString(16);
@@ -841,12 +854,14 @@ export class PandaniteJobs{
         return hexString;
     }
 
-    public async printPeeringInfo() {
+    private async printPeeringInfo() {
 
         logger.info("----===== Active Peers (" + this.activePeers.length + ") =====----");
         logger.info("NetworkName: " + globalThis.networkName);
         logger.info("BlockHeight: " + this.myBlockHeight);
         logger.info("Difficulty: " + this.difficulty);
+        const currentMiningFee = PandaniteCore.getCurrentMiningFee(this.myBlockHeight + 1);
+        logger.info("Current Miner Reward: " + Big(currentMiningFee).div(10**4).toFixed(4) + " PDN");
 
         for (let i = 0; i < this.activePeers.length; i++)
         {
@@ -861,14 +876,28 @@ export class PandaniteJobs{
 
     }
 
-    public async checkPeer(peer: string): Promise<boolean> {
+    private checkPeer(peer: string): Promise<boolean> {
 
         return new Promise<boolean>(async (resolve, reject) => {
+
+            if (this.badPeers.includes(peer))
+            {
+                resolve(false);
+            }
 
             let stripPeer = peer.replace('http://', '');
             let splitPeer = stripPeer.split(":");
 
-            if (splitPeer[0] !== this.myIpAddress)
+            const isPortActive = await this.isPortActive(String(splitPeer[0]), Number(splitPeer[1]));
+
+            if (isPortActive === false) {
+                logger.warn("Port not active for " + peer);
+                await Peer.updateMany({url: peer}, {$set: {isActive: false, updatedAt: Date.now()}});
+                this.removeActivePeer(peer);
+                resolve(false);
+            }
+
+            if (!["localhost", "127.0.0.1", this.myIpAddress].includes(splitPeer[0])) // don't peer with yourself.
             {  
 
                 if (this.peerVersions[peer] === 2) // PEER VERSION 2
@@ -880,7 +909,6 @@ export class PandaniteJobs{
                         // check if websocket is still open
                         if (this.websocketPeers[peer].readyState === WebSocket.OPEN)
                         {
-                            
                             // get stats
                             const messageId = this.stringToHex(peer) + "." + uuidv4();
 
@@ -902,10 +930,7 @@ export class PandaniteJobs{
 
                                     this.peerVersions[peer] = 2; // assumed since this is ws
             
-                                    if (!this.activePeers.includes(peer))
-                                    {
-                                        this.activePeers.push(peer);
-                                    }
+                                    this.addActivePeer(peer);
 
                                     this.peerHeights[peer] = parseInt(jsondata.current_block);
             
@@ -986,6 +1011,7 @@ export class PandaniteJobs{
                         else
                         {
 
+                            this.websocketPeers[peer].terminate();
                             delete this.websocketPeers[peer];
 
                         }
@@ -993,18 +1019,19 @@ export class PandaniteJobs{
                     }
                     else
                     {
+
                         // Try to connect socket
                         try {
 
-                            var that = this;
+                            let that = this;
 
-                            const client = new WebSocket(peer.replace("http://", "ws://"), {handshakeTimeout: 3000, timeout: 3000});
+                            this.websocketPeers[peer] = new WebSocket(peer.replace("http://", "ws://"), {handshakeTimeout: 3000, timeout: 3000});
 
-                            client.on('error', console.error);
+                            this.websocketPeers[peer].on('error', function err() {
+                                this.removeActivePeer(peer);
+                            });
 
-                            client.on('open', function open() {
-
-                                that.websocketPeers[peer] = client;
+                            this.websocketPeers[peer].on('open', function open() {
 
                                 // peer notify
                                 const messageId2 = that.stringToHex(peer) + "." + uuidv4();
@@ -1020,11 +1047,6 @@ export class PandaniteJobs{
                                 } catch (e) {
                                     // could not send message
                                 }
-
-                            
-
-
-
 
                                 // get stats
 
@@ -1048,10 +1070,7 @@ export class PandaniteJobs{
 
                                         that.peerVersions[peer] = 2; // assumed since this is ws
                 
-                                        if (!that.activePeers.includes(peer))
-                                        {
-                                            that.activePeers.push(peer);
-                                        }
+                                        that.addActivePeer(peer);
 
                                         that.peerHeights[peer] = parseInt(jsondata.current_block);
                 
@@ -1107,10 +1126,7 @@ export class PandaniteJobs{
 
                                         logger.info("Peer " + peer + ": OK");
 
-                                        if (!that.activePeers.includes(peer))
-                                        {
-                                            that.activePeers.push(peer);
-                                        }
+                                        that.addActivePeer(peer);
 
                                         delete that.wsRespFunc[messageId];
 
@@ -1127,13 +1143,14 @@ export class PandaniteJobs{
                                 } catch (e) {
                                     logger.warn("Peer " + peer + ": NOTOK");
                                     logger.warn(e);
+                                    that.removeActivePeer(peer);
                                     delete that.wsRespFunc[messageId];
                                     delete that.websocketPeers[peer]
                                 }
 
                             });
                             
-                            client.on('message', function message(data) {
+                            this.websocketPeers[peer].on('message', function message(data) {
 
                                 try {
 
@@ -1152,7 +1169,7 @@ export class PandaniteJobs{
                                 }
                             });
 
-                            client.on('close', async function close() {
+                            this.websocketPeers[peer].on('close', async function close() {
 
                                 logger.warn('Websocket disconnected from peer: ' + peer);
 
@@ -1184,6 +1201,7 @@ export class PandaniteJobs{
 
                             logger.warn("Peer " + peer + ": NOTOK");
                             logger.warn(e);
+                            this.removeActivePeer(peer);
                             delete this.websocketPeers[peer]
 
                         }
@@ -1196,8 +1214,11 @@ export class PandaniteJobs{
 
                     try {
 
-                        const response = await axios.get(peer + "/stats");
-                        const data = response.data;
+logger.info("checking peer " + peer);
+                        
+                        // minimum version 0.7.13
+
+                        const data: any = await this.getJSONFromURL(peer + "/stats");
 
                         if (!data || parseInt(data.current_block) === 0) {
                             throw new Error('Bad Peer');
@@ -1214,26 +1235,42 @@ export class PandaniteJobs{
                             {
                                 this.peerVersions[peer] = 2;
                             }
+                            else
+                            {
+
+                                this.peerVersions[peer] = 1;
+
+                                if (parseInt(splitVersion[1]) < 7) {
+                                    this.badPeers.push(peer);
+                                    logger.warn("Bad Peer Version " + data.node_version);
+                                    throw new Error('Bad Peer Version');
+                                }
+    
+                                if (parseInt(splitVersion[1]) == 7 && parseInt(splitVersion[2]) < 13) {
+                                    this.badPeers.push(peer);
+                                    logger.warn("Bad Peer Version " + data.node_version);
+                                    throw new Error('Bad Peer Version');
+                                }
+
+                            }
                         }
                         else
                         {
-                            this.peerVersions[peer] = 1;
+                            this.badPeers.push(peer);
+                            logger.warn("Bad Peer Version N/A");
+                            throw new Error('Bad Peer Version');
                         }
 
                         logger.info("Peer " + peer + ": OK");
 
-                        if (!this.activePeers.includes(peer))
-                        {
-                            this.activePeers.push(peer);
-                        }
+                        this.addActivePeer(peer);
 
                         this.peerHeights[peer] = parseInt(data.current_block);
 
                         const havePeer = await Peer.countDocuments({url: peer});
-        
+
                         if (havePeer === 0)
                         {
-
                             let stripPeer = peer.replace('http://', '');
                             let splitPeer = stripPeer.split(":");
 
@@ -1253,7 +1290,6 @@ export class PandaniteJobs{
                         else if (havePeer > 1)
                         {
                             // too many records for same peer.  flush all and recreate
-
                             await Peer.deleteMany({url: peer});
 
                             let stripPeer = peer.replace('http://', '');
@@ -1305,7 +1341,7 @@ export class PandaniteJobs{
 
     }
 
-    public async checkPeers(): Promise<boolean>   {
+    private checkPeers(): Promise<boolean>   {
 
         return new Promise<boolean>(async (resolve, reject) => {
 
@@ -1314,31 +1350,37 @@ export class PandaniteJobs{
             this.checkingPeers = true;
             this.checkPeerLock = Date.now();
             
-            const peerList = await Peer.find({isActive: true});
+            // Check oldest 5 peers
+            const peerList = await Peer.find({isActive: true}).sort({lastSeen: 1}).limit(5);
 
-            this.pendingPeers = [];
+            let pendingPeers = [];
 
             for (let i = 0; i < peerList.length; i++)
             {
                 let thisPeer = peerList[i];
-                if (!this.pendingPeers.includes("http://" + thisPeer.ipAddress + ":" + thisPeer.port))
-                    this.pendingPeers.push("http://" + thisPeer.ipAddress + ":" + thisPeer.port);
+                if (thisPeer.url)
+                    pendingPeers.push(thisPeer.url);
             }
 
-            if (this.pendingPeers.length === 0)
+            if (pendingPeers.length === 0)
             {
                 logger.warn("No active peers.  Using default peers")
-                this.pendingPeers = globalThis.defaultPeers;
+                pendingPeers = globalThis.defaultPeers;
             }
 
             let allPromises = [];
 
-            for (let i = 0; i < this.pendingPeers.length; i++)
+            logger.info("checking " + pendingPeers.length + " peers");
+
+            for (let i = 0; i < pendingPeers.length; i++)
             {
-                allPromises[i] = await this.checkPeer(this.pendingPeers[i]);
+                allPromises[i] = this.checkPeer(pendingPeers[i]);
             }
 
-            await Promise.all(allPromises);
+            if (allPromises.length > 0)
+            {
+                await Promise.all(allPromises);
+            }
 
             this.checkingPeers = false;
             this.checkPeerLock = 0;
@@ -1349,7 +1391,7 @@ export class PandaniteJobs{
 
     }
 
-    public async findPeers(): Promise<boolean>  {
+    private findPeers(): Promise<boolean>  {
 
         return new Promise<boolean>(async (resolve, reject) => {
 
@@ -1358,113 +1400,51 @@ export class PandaniteJobs{
             this.findingPeers = true;
             this.findPeerLock = Date.now();
 
-            // just select one peer to find new peers from each run
-            const peer = this.activePeers[Math.floor(Math.random() * this.activePeers.length)]; // Select a random peer to get peer info from
-
-            if (!peer) resolve(false);
+            let allPromises = [];
 
             try {
 
-                const response = await axios({
-                    url: peer + "/peers",
-                    method: 'get',
-                    responseType: 'json'
-                });
+                // make copy
+                const localActive: string[] = JSON.parse(JSON.stringify(this.activePeers));
 
-                const data = response.data;
+                if (localActive.length == 0) resolve(true);
+
+                // just select one peer to find new peers from each run
+                const randomIndex = Math.floor(Math.random() * localActive.length);
+
+                const peer = localActive[randomIndex] // Select a random peer to get peer info from
+
+                logger.info("random peer test: " + peer)
+
+                const data: any = await this.getJSONFromURL(peer + "/peers");
+
+                if (!data || data.length === 0) resolve(false);
 
                 for (let i = 0; i < data.length; i++)
                 {
 
-                    let thisPeer = data[i];
+                    let thisPeer = String(data[i]);
 
                     let stripPeer = thisPeer.replace('http://', '');
                     let splitPeer = stripPeer.split(":");
 
-                    if (!["localhost", "127.0.0.1", this.myIpAddress].includes(splitPeer[0])) // don't peer with yourself.
+                    if (splitPeer.length !== 2) continue;
+
+                    if (["localhost", "127.0.0.1", this.myIpAddress].includes(splitPeer[0]) && splitPeer[1] === globalThis.appPort)
+                    {
+                        // apparent self reference, skip
+                        continue;
+                    }
+                    else
                     {
 
-                        let havePeer = await Peer.countDocuments({url: thisPeer});
-
-                        if (havePeer === 0)
-                        {
-
-                            try {
-
-                                const peerresponse = await axios({
-                                    url: thisPeer + "/name",
-                                    method: 'get',
-                                    responseType: 'json'
-                                });
-            
-                                const data = peerresponse.data;
-
-                                if (data.networkName == globalThis.networkName)
-                                {
-
-                                    await Peer.create({
-                                        url: thisPeer,
-                                        ipAddress: splitPeer[0],
-                                        port: splitPeer[1],
-                                        lastSeen: 0,
-                                        isActive: true,
-                                        lastHeight: 0,
-                                        networkName: globalThis.networkName,
-                                        createdAt: Date.now(),
-                                        updatedAt: Date.now()
-                                    });
-
-                                    logger.info("Found new peer " + thisPeer);
-
-                                }
-
-                            } catch (e) {
-
-
-                            }
-    
+                        if (this.badPeers.includes(thisPeer)) {
+                            continue;
                         }
-                        else if (havePeer === 1)
-                        {
 
-                            try {
+                        let peerCheck = this.doPeerCheck(thisPeer, String(splitPeer[0]), Number(splitPeer[1]));
 
-                                let haveActivePeer = await Peer.countDocuments({url: thisPeer, isActive: true});
-
-                                if (haveActivePeer === 0)
-                                {
-
-                                    const peerresponse = await axios({
-                                        url: thisPeer + "/name",
-                                        method: 'get',
-                                        responseType: 'json'
-                                    });
-                
-                                    const data = peerresponse.data;
-
-                                    if (data.networkName === globalThis.networkName)
-                                    {
-
-                                        await Peer.updateOne({url: thisPeer}, {$set: {isActive: true, updatedAt: Date.now()}})
-
-                                        logger.info("Updating peer to active " + thisPeer);
-
-                                    }
-
-                                }
-
-                            } catch (e) {
-
-
-                            }
-
-                        }
-                        else if (havePeer > 1)
-                        {
-                            // too many records for same peer - reset 
-                            await Peer.deleteMany({url: thisPeer});
-
-                        }
+                        allPromises.push(peerCheck);
 
                     }
 
@@ -1476,6 +1456,10 @@ export class PandaniteJobs{
                 
             }
 
+            if (allPromises.length > 0) {
+                await Promise.all(allPromises);
+            }
+
             this.findingPeers = false;
             this.findPeerLock = 0;
 
@@ -1485,7 +1469,42 @@ export class PandaniteJobs{
 
     }
 
-    public async downloadBlocks(): Promise<boolean>   {
+    private doPeerCheck(url: string, ip: string, port: number): Promise<boolean> {
+
+        return new Promise<boolean>(async (resolve, reject) => {
+
+            const isPortActive = await this.isPortActive(ip, port);
+
+            if (isPortActive === true)
+            {
+
+                await Peer.updateOne(
+                    { url: url },
+                    { $set: {
+                        isActive: true,
+                        networkName: globalThis.networkName,
+                        updatedAt: Date.now()
+                    },
+                    $setOnInsert: {
+                        ipAddress: ip,
+                        port: port,
+                        lastSeen: 0,
+                        lastHeight: 0,
+                        createdAt: Date.now()
+                    }
+                    },
+                    { upsert: true } // Make this update into an upsert
+                );
+
+                logger.info("Found new peer " + url);
+
+            }
+
+        });
+
+    }
+
+    private downloadBlocks(): Promise<boolean>   {
 
         return new Promise<boolean>(async (resolve, reject) => {
 
@@ -1506,38 +1525,22 @@ export class PandaniteJobs{
                 }
             }
 
+            if (maxHeight === 0) resolve(false);
+
             if (maxHeight < end) end = maxHeight;
 
-            if (start > end)
-            {
-                this.downloadingBlocks = false;
-            }
-            else
+            for (let i = start; i <= end; i++)
             {
 
-                for (let i = 0; i < this.activePeers.length; i++)
+                if (!this.downloadedBlocks[i] && !this.queueProcessor.hasqueue(i))
                 {
-                    const thisPeer = this.activePeers[i];
-                    if (!this.queueProcessor.hasWorker(thisPeer))
-                    {
-                        this.queueProcessor.addWorker(thisPeer);
-                    }
+                    this.downloadedBlocks[i] = 'pending';
+                    this.queueProcessor.enqueue(i);
                 }
-
-                for (let i = start; i <= end; i++)
-                {
-
-                    if (!this.downloadedBlocks[i] && !this.queueProcessor.hasqueue(i))
-                    {
-                        this.downloadedBlocks[i] = 'pending';
-                        this.queueProcessor.enqueue(i);
-                    }
-                    
-                }
-
-                this.downloadingBlocks = false;
-
+                
             }
+
+            this.downloadingBlocks = false;
 
             resolve(true);
 
@@ -1545,7 +1548,7 @@ export class PandaniteJobs{
 
     }
 
-    public async syncBlocks(): Promise<boolean>   {
+    private syncBlocks(): Promise<boolean>   {
 
         return new Promise<boolean>(async (resolve, reject) => {
 
@@ -1614,7 +1617,7 @@ export class PandaniteJobs{
 
     }
 
-    private async doBlockRollback(height: number): Promise<boolean> {
+    private doBlockRollback(height: number): Promise<boolean> {
 
         return new Promise<boolean>(async (resolve, reject) => {
 
@@ -1718,7 +1721,7 @@ export class PandaniteJobs{
 
     }
 
-    private async importBlock(block: any): Promise<any> {
+    private importBlock(block: any): Promise<any> {
 
         return new Promise<any>(async (resolve, reject) => {
 
@@ -2090,7 +2093,9 @@ export class PandaniteJobs{
 
                     this.myBlockHeight = block.id;
 
-                    await this.updateDifficulty();
+                    const lastDiffHeight = Math.floor(block.id/Constants.DIFFICULTY_LOOKBACK)*Constants.DIFFICULTY_LOOKBACK;
+            
+                    await this.updateDifficultyForHeight(lastDiffHeight);
 
                     logger.info("Imported Block #" + block.id);
 
@@ -2099,6 +2104,14 @@ export class PandaniteJobs{
                 }
                 else
                 {
+                    // deactivate peer which gave us this block
+
+                    logger.warn("Peer " + block.receivedFromPeer + ": BADBLOCK");
+
+                    await Peer.updateMany({url: block.receivedFromPeer}, {$set: {isActive: false, updatedAt: Date.now()}});
+
+                    this.removeActivePeer(block.receivedFromPeer);
+
                     reject('Invalid Block.');
                 }
 
@@ -2112,50 +2125,21 @@ export class PandaniteJobs{
 
     }
 
-    private async updateDifficulty(): Promise<any> {
+    private updateDifficulty(): Promise<any> {
 
         return new Promise<any>(async (resolve, reject) => {
 
-            try {
+            const lastDiffHeight = Math.floor(this.myBlockHeight/Constants.DIFFICULTY_LOOKBACK)*Constants.DIFFICULTY_LOOKBACK;
 
-                if (this.myBlockHeight <= Constants.DIFFICULTY_LOOKBACK * 2) resolve(false);
-                if (this.myBlockHeight % Constants.DIFFICULTY_LOOKBACK !== 0) resolve(false);
+            await this.updateDifficultyForHeight(lastDiffHeight);
 
-                const firstID: number = this.myBlockHeight - Constants.DIFFICULTY_LOOKBACK;
-                const lastID: number = this.myBlockHeight;
-                const first = await Block.findOne({height: firstID});
-                const last = await Block.findOne({height: lastID});
-
-                if (!first || !last) resolve(false);
-
-                const elapsed: number = last.timestamp - first.timestamp;
-                const numBlocksElapsed: number = lastID - firstID;
-                const target: number = numBlocksElapsed * Constants.DESIRED_BLOCK_TIME_SEC;
-                const difficulty: number = last.difficulty;
-                this.difficulty = PandaniteCore.computeDifficulty(difficulty, elapsed, target);
-            
-                if (
-                this.myBlockHeight >= Constants.PUFFERFISH_START_BLOCK &&
-                this.myBlockHeight < Constants.PUFFERFISH_START_BLOCK + Constants.DIFFICULTY_LOOKBACK * 2
-                ) {
-                this.difficulty = Constants.MIN_DIFFICULTY;
-                }
-
-                logger.info("New Difficulty: " + this.difficulty);
-
-                resolve(true);
-
-            } catch (e) {
-
-                resolve(false);
-                
-            }
+            resolve(true);
 
         });
 
     }
 
-    private async updateDifficultyForHeight(height: number): Promise<any> {
+    private updateDifficultyForHeight(height: number): Promise<any> {
 
         return new Promise<any>(async (resolve, reject) => {
 
@@ -2207,5 +2191,101 @@ export class PandaniteJobs{
         });
 
     }
+
+    private isPortActive(ip: string, port: number): Promise<boolean> {
+        return new Promise((resolve) => {
+          const socket = new net.Socket();
+
+          const timer = setTimeout(() => {
+            socket.destroy();
+            resolve(false);
+          }, 2000);
+
+          socket.on('connect', () => {
+            clearTimeout(timer);
+            socket.destroy();
+            resolve(true);
+          });
+      
+          socket.on('error', () => {
+            clearTimeout(timer);
+            resolve(false);
+          });
+      
+          socket.connect(port, ip);
+        });
+    }
+
+    private getJSONFromURL(url: string): Promise<any> {
+      return new Promise((resolve, reject) => {
+
+        let request: any;
+
+        setTimeout(() => {
+            request.destroy();
+            reject(new Error('Request timed out'));
+        }, 3000);
+
+        request = http.get(url, (res) => {
+          let data = '';
+    
+          res.on('data', (chunk) => {
+            data += chunk;
+          });
+    
+          res.on('end', () => {
+            try {
+              const jsonData = JSON.parse(data);
+              resolve(jsonData);
+            } catch (error) {
+              reject(error);
+            }
+          });
+        });
+    
+        request.on('error', (error) => {
+          reject(error);
+        });
+    
+        setTimeout(() => {
+          request.destroy();
+          reject(new Error('Request timed out'));
+        }, 3000);
+      });
+    }
+    
+    private getStringFromURL(url: string): Promise<string> {
+        return new Promise((resolve, reject) => {
+
+          let request: any;
+
+          setTimeout(() => {
+            request.destroy();
+            reject(new Error('Request timed out'));
+          }, 3000);
+
+          request = http.get(url, (res) => {
+            let data = '';
+      
+            res.on('data', (chunk) => {
+              data += chunk;
+            });
+      
+            res.on('end', () => {
+              try {
+                const stringData = data;
+                resolve(stringData);
+              } catch (error) {
+                reject(error);
+              }
+            });
+          });
+      
+          request.on('error', (error) => {
+            reject(error);
+          });
+      
+        });
+      }
 
 }

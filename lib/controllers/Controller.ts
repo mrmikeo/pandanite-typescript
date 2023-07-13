@@ -4,7 +4,8 @@ import { PandaniteCore } from '../core/Core'
 import { Request, Response } from 'express';
 import Big from 'big.js';
 import { Constants} from "../core/Constants"
-import axios from 'axios';
+import * as net from 'net';
+
 
 const Transaction = mongoose.model('Transaction', transactionSchema);
 const Address = mongoose.model('Address', addressSchema);
@@ -549,46 +550,35 @@ export class ApiController{
 
             // A v2 peer has connected to us, lets see if we can connect to them
 
-            const peerUrl = "http://" + hostname + ":" + port;
+            const isActive = await this.isPortActive(hostname, port);
 
-            const havePeer = await Peer.findOne({url: peerUrl});
-
-            if (!havePeer || havePeer.isActive === false)
+            if (isActive === true)
             {
 
-                const peerresponse = await axios({
-                    url: peerUrl + "/name",
-                    method: 'get',
-                    responseType: 'json'
-                });
+                const peerUrl = "http://" + hostname + ":" + port;
 
-                const data = peerresponse.data;
+                const havePeer = await Peer.findOne({url: peerUrl});
 
-                if (data.networkName == globalThis.networkName)
+                if (!havePeer)
                 {
 
-                    if (!havePeer)
-                    {
+                    await Peer.create({
+                        url: peerUrl,
+                        ipAddress: hostname,
+                        port: port,
+                        lastSeen: 0,
+                        isActive: true,
+                        lastHeight: 0,
+                        networkName: globalThis.networkName,
+                        createdAt: Date.now(),
+                        updatedAt: Date.now()
+                    });
 
-                        await Peer.create({
-                            url: peerUrl,
-                            ipAddress: hostname,
-                            port: port,
-                            lastSeen: 0,
-                            isActive: true,
-                            lastHeight: 0,
-                            networkName: globalThis.networkName,
-                            createdAt: Date.now(),
-                            updatedAt: Date.now()
-                        });
+                }
+                else if (havePeer.isActive === false)
+                {
 
-                    }
-                    else if (havePeer.isActive === false)
-                    {
-
-                        await Peer.updateMany({url: peerUrl}, {$set: {isActive: true, updatedAt: Date.now()}});
-
-                    }
+                    await Peer.updateMany({url: peerUrl}, {$set: {isActive: true, updatedAt: Date.now()}});
 
                 }
 
@@ -766,7 +756,7 @@ export class ApiController{
 
             const lastBlock = await Block.find().sort({height: -1}).limit(1); 
 
-            const chainHeight = lastBlock[0]?.height || 0;
+            const chainHeight: number = lastBlock[0]?.height || 0;
 
             const lastDiffHeight = Math.floor(chainHeight/Constants.DIFFICULTY_LOOKBACK)*Constants.DIFFICULTY_LOOKBACK;
 
@@ -808,7 +798,7 @@ export class ApiController{
             result["lastHash"] = lastBlock[0]?.blockHash;
             result["challengeSize"] = thisdifficulty;
             result["chainLength"] = chainHeight;
-            result["miningFee"] = PandaniteCore.getCurrentMiningFee(chainHeight);
+            result["miningFee"] = PandaniteCore.getCurrentMiningFee(chainHeight + 1);
             result["lastTimestamp"] = lastBlock[0]?.timestamp;
 
         } catch (e) {
@@ -1222,6 +1212,33 @@ console.log(peerInfo);
             };
         }
 
+    }
+
+
+
+
+    private isPortActive(ip: string, port: number): Promise<boolean> {
+        return new Promise((resolve) => {
+          const socket = new net.Socket();
+
+          const timer = setTimeout(() => {
+            socket.destroy();
+            resolve(false);
+          }, 2000);
+
+          socket.on('connect', () => {
+            clearTimeout(timer);
+            socket.destroy();
+            resolve(true);
+          });
+      
+          socket.on('error', () => {
+            clearTimeout(timer);
+            resolve(false);
+          });
+      
+          socket.connect(port, ip);
+        });
     }
 
 }

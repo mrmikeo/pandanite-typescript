@@ -223,10 +223,11 @@ export class PandaniteCore{
             }
 
             // Validate Blockhash
-            const expectedBlockHash = block.hash.toUpperCase();
+            const expectedBlockHash = block.hash.toString().toUpperCase();
             const actualBlockHash = PandaniteCore.getBlockHash(block).toUpperCase();
 
             if (expectedBlockHash !== actualBlockHash) {
+                console.log(JSON.stringify(block, null, 2));
                 reject("checkBlockHash failed at Validate Blockhash " + actualBlockHash + " != " + expectedBlockHash);
             }
 

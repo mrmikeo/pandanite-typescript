@@ -27,9 +27,10 @@ globalThis.appPort = PORT;
 globalThis.appVersion = '2.0.0';
 globalThis.appName = argv.name || 'Pandanite Node';
 globalThis.networkName = argv.network || 'mainnet';
-globalThis.defaultPeers = ["http://5.9.151.50:3000","http://65.21.224.171:3000","http://65.21.89.182:3000","http://88.119.169.111:3000","http://88.119.161.26:3001", "http://31.220.88.229:3001"]; // last 2 are v2
+globalThis.defaultPeers = ["http://31.220.88.229:3000","http://88.119.161.26:3000","http://161.97.102.112:3000","http://88.119.169.111:3000","http://88.119.161.26:3001", "http://31.220.88.229:3001"]; // last 2 are v2
 globalThis.shuttingDown = false;
 globalThis.safeToShutdown = true;
+globalThis.maxPeers = 20;
 
 const server = http.createServer(app);
 
@@ -88,6 +89,12 @@ process.on('SIGINT', function() {
 	});
 	
 });
+
+process.on('uncaughtException', err => {
+    console.log('uncaughtException!! shutting down...');
+    console.log(err);
+    process.exit(1);
+}); 
 
 server.listen(PORT, () => {
 
