@@ -88,6 +88,10 @@ class AsyncQueue {
     isEmpty(): boolean {
       return this.queue.length === 0;
     }
+
+    getNextItem(): number | undefined {
+        return this.queue[0];
+    }
 }
   
 type Worker = (that: any, hostname: string, item: number) => Promise<void>;
@@ -96,14 +100,14 @@ class QueueProcessor {
     private queue: AsyncQueue;
     private workers: Map<string, boolean>;
     private workerFunction: Worker;
-    private that: any;
+    private jobs: any;
   
-    constructor(that) {
-      this.that = that;
+    constructor(jobs) {
+      this.jobs = jobs;
       this.queue = new AsyncQueue();
       this.workers = new Map<string, boolean>();
       this.workerFunction = this.defaultWorkerFunction;
-      this.processQueue(that);
+      this.processQueue(jobs);
     }
   
     addWorker(hostname: string): void {
@@ -126,7 +130,7 @@ class QueueProcessor {
         return this.workers.size;
     }
 
-    async processQueue(that: number): Promise<void> {
+    async processQueue(that: any): Promise<void> {
         while (true) {
           const availableWorkers = Array.from(this.workers.entries()).filter(
             ([_, isWorking]) => !isWorking
@@ -134,15 +138,19 @@ class QueueProcessor {
 
           let workersForHeight = [];
 
+          const nextInQueue = this.queue.getNextItem();
+
           for (let i = 0; i < availableWorkers.length; i++)
           {
-            const [thisPeer] = availableWorkers[i];
-            if (this.that.getPeerHeight(thisPeer) >= that)
+            const thisPeer = availableWorkers[i][0];
+            if (this.jobs.peerHeights[thisPeer] >= nextInQueue)
             {
                 workersForHeight.push(thisPeer);
             }
           }
     
+//console.log(workersForHeight);
+
           if (workersForHeight.length === 0) {
             await new Promise<void>((resolve) => setTimeout(resolve, 10)); // Wait for available workers
             continue; // No available workers, so skip to next iteration
