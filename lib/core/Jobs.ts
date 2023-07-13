@@ -1535,9 +1535,19 @@ logger.info("checking peer " + peer);
                 }
             }
 
-            if (maxHeight === 0) return resolve(false);
+            if (maxHeight === 0) 
+            {
+                this.downloadingBlocks = false;
+                return resolve(false);
+            }
 
             if (maxHeight < end) end = maxHeight;
+
+            if (end < start) 
+            {
+                this.downloadingBlocks = false;
+                return resolve(false);
+            }
 
 logger.info("try download blocks " + start + " to " + end);
 logger.info("workers: " + this.queueProcessor.countWorkers());
