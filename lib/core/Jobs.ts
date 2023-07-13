@@ -208,6 +208,9 @@ class QueueProcessor {
 
                         } catch (e) {
 
+                            delete that.downloadedBlocks[height];
+                            delete that.wsRespFunc[messageId];
+                            that.queueProcessor.requeue(height);
 
                         }
 
@@ -219,6 +222,7 @@ class QueueProcessor {
                         logger.warn(e);
                         delete that.wsRespFunc[messageId];
                         delete that.websocketPeers[thisPeer];
+                        that.queueProcessor.requeue(height);
                     }
                 }
                 else
@@ -234,7 +238,6 @@ class QueueProcessor {
                     else
                     {
                         delete that.downloadedBlocks[height];
-                        that.queueProcessor.removeWorker(thisPeer);
                         that.queueProcessor.requeue(height);
                     }
 
@@ -253,7 +256,6 @@ class QueueProcessor {
 
             that.removeActivePeer(thisPeer);
             delete that.downloadedBlocks[height];
-            that.queueProcessor.removeWorker(thisPeer);
             that.queueProcessor.requeue(height);
 
         }
@@ -261,9 +263,6 @@ class QueueProcessor {
         return;
 
     };
-
-
-
 
 }
 
