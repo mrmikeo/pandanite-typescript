@@ -158,8 +158,7 @@ export class PandaniteCore{
             // Check Block ID
             if (block.id != lastBlockHeight + 1)
             {
-                reject("Invalid Block Height: " + block.id);
-                return;
+                return reject("Invalid Block Height: " + block.id);
             }
 
             // Check block reward
@@ -168,8 +167,7 @@ export class PandaniteCore{
                 const expectedReward = PandaniteCore.getCurrentMiningFee(block.id);
                 if (expectedReward !==  blockReward)
                 {
-                    reject("Invalid Block Reward: " + blockReward + ", Expected: " + expectedReward);
-                    return;
+                    return reject("Invalid Block Reward: " + blockReward + ", Expected: " + expectedReward);
                 }
             }
 
@@ -177,15 +175,13 @@ export class PandaniteCore{
             const blockTxSize = block.transactions.length;
             if (blockTxSize > Constants.MAX_TRANSACTIONS_PER_BLOCK)
             {
-                reject("Invalid Transaction Count: " + blockTxSize);
-                return;
+                return reject("Invalid Transaction Count: " + blockTxSize);
             }
 
             // Validate Block Difficulty
             if (block.difficulty != expectedDifficulty)
             {
-                reject("Invalid Block Difficulty: " + block.difficulty + ", Expected: " + expectedDifficulty);
-                return;
+                return reject("Invalid Block Difficulty: " + block.difficulty + ", Expected: " + expectedDifficulty);
             }
 
             // Validate Block Time
@@ -195,16 +191,14 @@ export class PandaniteCore{
                 const maxTime: number = networkTimestamp + (120 * 60)
                 if (block.timestamp > maxTime)
                 {
-                    reject("Block Timestamp Too Far Into Future");
-                    return;
+                    return reject("Block Timestamp Too Far Into Future");
                 }
               
                 // block must be after the median timestamp of last 10 blocks
                 if (medianTimestamp > 0) {
                     if (block.timestamp < medianTimestamp)
                     {
-                        reject("Block Timestamp Too Old");
-                        return;
+                        return reject("Block Timestamp Too Old");
                     }
                 }
             }
@@ -216,8 +210,7 @@ export class PandaniteCore{
                 const isValid = PandaniteCore.validateTransaction(thisTx);
                 if (isValid === false) 
                 {
-                    reject("checkBlockHash failed at Validate Transaction");
-                    return;
+                    return reject("checkBlockHash failed at Validate Transaction");
                 }
             }
 
@@ -226,8 +219,7 @@ export class PandaniteCore{
             const actualMerkleHash = PandaniteCore.checkMerkleTree(block.transactions);
 
             if (expectedMerkleHash !== actualMerkleHash) {
-                reject("checkBlockHash failed at Validate MerkleTree " + actualMerkleHash + " != " + expectedMerkleHash);
-                return;
+                return reject("checkBlockHash failed at Validate MerkleTree " + actualMerkleHash + " != " + expectedMerkleHash);
             }
 
             // Validate Blockhash
@@ -236,20 +228,17 @@ export class PandaniteCore{
 
             if (expectedBlockHash !== actualBlockHash) {
                 console.log(JSON.stringify(block, null, 2));
-                reject("checkBlockHash failed at Validate Blockhash " + actualBlockHash + " != " + expectedBlockHash);
-                return;
+                return reject("checkBlockHash failed at Validate Blockhash " + actualBlockHash + " != " + expectedBlockHash);
             }
 
             // Check Nonce
             const validNonce = PandaniteCore.verifyNonce(block);
             if (validNonce === false)
             {
-                reject("Invalid Block Nonce: " + block.nonce);
-                return;
+                return reject("Invalid Block Nonce: " + block.nonce);
             }
 
-            resolve(true);
-            return;
+            return resolve(true);
 
         });
 

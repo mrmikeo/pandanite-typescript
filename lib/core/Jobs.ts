@@ -1338,8 +1338,7 @@ logger.info("checking peer " + peer);
 
             }
 
-            resolve(true);
-            return;
+            return resolve(true);
 
         });
 
@@ -1349,7 +1348,7 @@ logger.info("checking peer " + peer);
 
         return new Promise<boolean>(async (resolve, reject) => {
 
-            if (globalThis.shuttingDown === true) resolve(false);
+            if (globalThis.shuttingDown === true) return resolve(false);
 
             this.checkingPeers = true;
             this.checkPeerLock = Date.now();
@@ -1389,8 +1388,7 @@ logger.info("checking peer " + peer);
             this.checkingPeers = false;
             this.checkPeerLock = 0;
 
-            resolve(true);
-            return;
+            return resolve(true);
 
         });
 
@@ -1400,7 +1398,7 @@ logger.info("checking peer " + peer);
 
         return new Promise<boolean>(async (resolve, reject) => {
 
-            if (globalThis.shuttingDown === true) resolve(false);
+            if (globalThis.shuttingDown === true) return resolve(false);
 
             this.findingPeers = true;
             this.findPeerLock = Date.now();
@@ -1412,7 +1410,7 @@ logger.info("checking peer " + peer);
                 // make copy
                 const localActive: string[] = JSON.parse(JSON.stringify(this.activePeers));
 
-                if (localActive.length == 0) resolve(true);
+                if (localActive.length == 0) return resolve(true);
 
                 // just select one peer to find new peers from each run
                 const randomIndex = Math.floor(Math.random() * localActive.length);
@@ -1423,7 +1421,7 @@ logger.info("checking peer " + peer);
 
                 const data: any = await this.getJSONFromURL(peer + "/peers");
 
-                if (!data || data.length === 0) resolve(false);
+                if (!data || data.length === 0) return resolve(false);
 
                 for (let i = 0; i < data.length; i++)
                 {
@@ -1468,8 +1466,7 @@ logger.info("checking peer " + peer);
             this.findingPeers = false;
             this.findPeerLock = 0;
 
-            resolve(true);
-            return;
+            return resolve(true);
 
         });
 
@@ -1504,13 +1501,11 @@ logger.info("checking peer " + peer);
 
                 logger.info("Found new peer " + url);
 
-                resolve(true);
-                return;
+                return resolve(true);
 
             }
 
-            resolve(false);
-            return;
+            return resolve(false);
 
         });
 
@@ -1520,7 +1515,7 @@ logger.info("checking peer " + peer);
 
         return new Promise<boolean>(async (resolve, reject) => {
 
-            if (globalThis.shuttingDown === true) resolve(false);
+            if (globalThis.shuttingDown === true) return resolve(false);
 
             this.downloadingBlocks = true;
 
@@ -1537,7 +1532,7 @@ logger.info("checking peer " + peer);
                 }
             }
 
-            if (maxHeight === 0) resolve(false);
+            if (maxHeight === 0) return resolve(false);
 
             if (maxHeight < end) end = maxHeight;
 
@@ -1554,8 +1549,7 @@ logger.info("checking peer " + peer);
 
             this.downloadingBlocks = false;
 
-            resolve(true);
-            return;
+            return resolve(true);
 
         });
 
@@ -1565,7 +1559,7 @@ logger.info("checking peer " + peer);
 
         return new Promise<boolean>(async (resolve, reject) => {
 
-            if (globalThis.shuttingDown === true) resolve(false);
+            if (globalThis.shuttingDown === true) return resolve(false);
 
             globalThis.safeToShutDown = false;
             this.syncingBlocks = true;
@@ -1624,8 +1618,7 @@ logger.info("checking peer " + peer);
             this.syncingBlocks = false;
             this.syncBlocksLock = 0;
 
-            resolve(true);
-            return;
+            return resolve(true);
 
         });
 
@@ -1673,8 +1666,7 @@ logger.info("checking peer " + peer);
 
                     await this.updateDifficultyForHeight(lastDiffHeight);
         
-                    resolve(true);
-                    return;
+                    return resolve(true);
 
                 } catch (e) {
 
@@ -1728,8 +1720,7 @@ logger.info("checking peer " + peer);
 
                 await this.updateDifficultyForHeight(lastDiffHeight);
     
-                resolve(true);
-                return;
+                return resolve(true);
 
             }
 
@@ -1756,8 +1747,7 @@ logger.info("checking peer " + peer);
 
                     if (block.id != expectedHeight)
                     {
-                        reject('Invalid Block. Unexpected Height');
-                        return;
+                        return reject('Invalid Block. Unexpected Height');
                     }
 
                     let medianTimestamp = 0;
@@ -1793,8 +1783,7 @@ logger.info("checking peer " + peer);
                         isValid = await PandaniteCore.checkBlockValid(block, lastBlock.blockHash, lastBlock.height, this.difficulty, networkTimestamp, medianTimestamp, blockReward);
                     } catch (e) {
                         logger.warn(e);
-                        reject(e);
-                        return;
+                        return reject(e);
                     }
 
                     // Poor previous design requires this in order to sync :(
@@ -1961,8 +1950,7 @@ logger.info("checking peer " + peer);
                         isValid = await PandaniteCore.checkBlockValid(block, "0000000000000000000000000000000000000000000000000000000000000000", 0, this.difficulty, networkTimestamp, medianTimestamp, 0);
                     } catch (e) {
                         logger.warn(e);
-                        reject(e);
-                        return;
+                        return reject(e);
                     }
 
                 }
@@ -2102,8 +2090,7 @@ logger.info("checking peer " + peer);
                         } catch (e) {
 
                             logger.warn(e);
-                            reject(e);
-                            return;
+                            return reject(e);
 
                         }
 
@@ -2119,8 +2106,7 @@ logger.info("checking peer " + peer);
 
                     logger.info("Imported Block #" + block.id);
 
-                    resolve(true);
-                    return;
+                    return resolve(true);
 
                 }
                 else
@@ -2133,14 +2119,12 @@ logger.info("checking peer " + peer);
 
                     this.removeActivePeer(block.receivedFromPeer);
 
-                    reject('Invalid Block.');
-                    return;
+                    return reject('Invalid Block.');
                 }
 
             } catch (e) {
 
-                reject(e);
-                return;
+                return reject(e);
 
             }
 
@@ -2156,8 +2140,7 @@ logger.info("checking peer " + peer);
 
             await this.updateDifficultyForHeight(lastDiffHeight);
 
-            resolve(true);
-            return;
+            return resolve(true);
 
         });
 
@@ -2170,13 +2153,11 @@ logger.info("checking peer " + peer);
             try {
 
                 if (height <= Constants.DIFFICULTY_LOOKBACK * 2) {
-                    resolve(false);
-                    return;
+                    return resolve(false);
                 }
 
                 if (height % Constants.DIFFICULTY_LOOKBACK !== 0) {
-                    resolve(false);
-                    return;
+                    return resolve(false);
                 }
 
                 const firstID: number = height - Constants.DIFFICULTY_LOOKBACK;
@@ -2187,15 +2168,13 @@ logger.info("checking peer " + peer);
                 if (!first)
                 {
                     logger.info("Could not find first block: " + firstID);
-                    resolve(false);
-                    return;
+                    return resolve(false);
                 }
 
                 if (!last)
                 {
                     logger.info("Could not find last block: " + lastID);
-                    resolve(false);
-                    return;
+                    return resolve(false);
                 }
 
                 const elapsed: number = last.timestamp - first.timestamp;
@@ -2213,13 +2192,11 @@ logger.info("checking peer " + peer);
 
                 logger.info("New Difficulty: " + this.difficulty);
 
-                resolve(true);
-                return;
+                return resolve(true);
 
             } catch (e) {
 
-                resolve(false);
-                return;
+                return resolve(false);
                 
             }
 
@@ -2233,21 +2210,18 @@ logger.info("checking peer " + peer);
 
           const timer = setTimeout(() => {
             socket.destroy();
-            resolve(false);
-            return;
+            return resolve(false);
           }, 2000);
 
           socket.on('connect', () => {
             clearTimeout(timer);
             socket.destroy();
-            resolve(true);
-            return;
+            return resolve(true);
           });
       
           socket.on('error', () => {
             clearTimeout(timer);
-            resolve(false);
-            return;
+            return resolve(false);
           });
       
           socket.connect(port, ip);
@@ -2263,8 +2237,7 @@ logger.info("checking peer " + peer);
           if (res.statusCode != 200) {
             request.destroy();
             console.log(url + " returned " + res.statusCode);
-            reject("Error Code " + res.statusCode);
-            return;
+            return reject("Error Code " + res.statusCode);
           }
 
           res.on('data', (chunk) => {
@@ -2274,24 +2247,20 @@ logger.info("checking peer " + peer);
           res.on('end', () => {
             try {
               const jsonData = JSON.parse(data);
-              resolve(jsonData);
-              return;
+              return resolve(jsonData);
             } catch (error) {
-              reject(error);
-              return;
+              return reject(error);
             }
           });
         });
     
         request.on('error', (error) => {
-          reject(error);
-          return;
+          return reject(error);
         });
 
         setTimeout(() => {
             request.destroy();
-            reject(new Error('Request timed out'));
-            return;
+            return reject(new Error('Request timed out'));
         }, 3000);
 
       });
@@ -2306,8 +2275,7 @@ logger.info("checking peer " + peer);
             if (res.statusCode != 200) {
                 request.destroy();
                 console.log(url + " returned " + res.statusCode);
-                reject("Error Code " + res.statusCode);
-                return;
+                return reject("Error Code " + res.statusCode);
             }
 
             res.on('data', (chunk) => {
@@ -2317,24 +2285,20 @@ logger.info("checking peer " + peer);
             res.on('end', () => {
               try {
                 const stringData = data;
-                resolve(stringData);
-                return;
+                return resolve(stringData);
               } catch (error) {
-                reject(error);
-                return;
+                return reject(error);
               }
             });
           });
       
           request.on('error', (error) => {
-            reject(error);
-            return;
+            return reject(error);
           });
 
           setTimeout(() => {
             request.destroy();
-            reject(new Error('Request timed out'));
-            return;
+            return reject(new Error('Request timed out'));
           }, 3000);
 
         });
