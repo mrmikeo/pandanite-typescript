@@ -2219,14 +2219,13 @@ logger.info("checking peer " + peer);
     private getJSONFromURL(url: string): Promise<any> {
       return new Promise((resolve, reject) => {
 
-        let request: any;
+        const options = {
+            headers: {
+                'Connection': 'keep-alive'
+            }
+        };
 
-        setTimeout(() => {
-            request.destroy();
-            reject(new Error('Request timed out'));
-        }, 3000);
-
-        request = http.get(url, (res) => {
+        const request = http.get(url, options, (res) => {
           let data = '';
 
           if (res.statusCode != 200) {
@@ -2252,21 +2251,25 @@ logger.info("checking peer " + peer);
         request.on('error', (error) => {
           reject(error);
         });
-    
+
+        setTimeout(() => {
+            request.destroy();
+            reject(new Error('Request timed out'));
+        }, 3000);
+
       });
     }
     
     private getStringFromURL(url: string): Promise<string> {
         return new Promise((resolve, reject) => {
 
-          let request: any;
+          const options = {
+            headers: {
+                'Connection': 'keep-alive'
+            }
+          };
 
-          setTimeout(() => {
-            request.destroy();
-            reject(new Error('Request timed out'));
-          }, 3000);
-
-          request = http.get(url, (res) => {
+          const request = http.get(url, options, (res) => {
             let data = '';
 
             if (res.statusCode != 200) {
@@ -2292,7 +2295,12 @@ logger.info("checking peer " + peer);
           request.on('error', (error) => {
             reject(error);
           });
-      
+
+          setTimeout(() => {
+            request.destroy();
+            reject(new Error('Request timed out'));
+          }, 3000);
+
         });
       }
 
