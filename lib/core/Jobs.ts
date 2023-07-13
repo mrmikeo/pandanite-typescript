@@ -208,6 +208,7 @@ class QueueProcessor {
 
                         } catch (e) {
 
+                            that.removeActivePeer(peer);
                             delete that.downloadedBlocks[height];
                             delete that.wsRespFunc[messageId];
                             that.queueProcessor.requeue(height);
@@ -220,6 +221,7 @@ class QueueProcessor {
                         that.websocketPeers[thisPeer].send(JSON.stringify(message));
                     } catch (e) {
                         logger.warn(e);
+                        that.removeActivePeer(peer);
                         delete that.wsRespFunc[messageId];
                         delete that.websocketPeers[thisPeer];
                         that.queueProcessor.requeue(height);
@@ -237,6 +239,7 @@ class QueueProcessor {
                     }
                     else
                     {
+                        that.removeActivePeer(peer);
                         delete that.downloadedBlocks[height];
                         that.queueProcessor.requeue(height);
                     }
@@ -247,6 +250,7 @@ class QueueProcessor {
             else
             {
 
+                that.removeActivePeer(peer);
                 delete that.downloadedBlocks[height];
                 that.queueProcessor.requeue(height);
 
@@ -1192,7 +1196,7 @@ export class PandaniteJobs{
 
                                 for (let i = 0; i < functionKeys.length; i++)
                                 {
-                                    
+
                                     let thisKey = functionKeys[i];
 
                                     if (thisKey.indexOf(peerHex) === 0)
