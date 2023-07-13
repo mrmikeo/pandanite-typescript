@@ -136,9 +136,10 @@ class QueueProcessor {
 
           for (let i = 0; i < availableWorkers.length; i++)
           {
-            if (this.that.getPeerHeight(availableWorkers[i]) >= that)
+            const [thisPeer] = availableWorkers[i];
+            if (this.that.getPeerHeight(thisPeer) >= that)
             {
-                workersForHeight.push(availableWorkers[i]);
+                workersForHeight.push(thisPeer);
             }
           }
     
@@ -149,7 +150,7 @@ class QueueProcessor {
     
           const item = await this.queue.dequeue(); // Dequeue item
     
-          const [hostname] = workersForHeight[Math.floor(Math.random() * workersForHeight.length)]; // Select a random available worker
+          const hostname = workersForHeight[Math.floor(Math.random() * workersForHeight.length)]; // Select a random available worker
           this.workers.set(hostname, true); // Mark the worker as busy
     
           this.workerFunction(that, hostname, item).then(() => {
