@@ -1034,7 +1034,7 @@ export class PandaniteJobs{
                             this.websocketPeers[peer] = new WebSocket(peer.replace("http://", "ws://"), {handshakeTimeout: 3000, timeout: 3000});
 
                             this.websocketPeers[peer].on('error', function err() {
-                                this.removeActivePeer(peer);
+                                that.removeActivePeer(peer);
                             });
 
                             this.websocketPeers[peer].on('open', function open() {
@@ -1192,6 +1192,7 @@ export class PandaniteJobs{
 
                                 for (let i = 0; i < functionKeys.length; i++)
                                 {
+                                    
                                     let thisKey = functionKeys[i];
 
                                     if (thisKey.indexOf(peerHex) === 0)
