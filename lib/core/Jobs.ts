@@ -2220,13 +2220,7 @@ logger.info("checking peer " + peer);
     private getJSONFromURL(url: string): Promise<any> {
       return new Promise((resolve, reject) => {
 
-        const options = {
-            headers: {
-                'Connection': 'keep-alive'
-            }
-        };
-
-        const request = http.get(url, options, (res) => {
+        const request = http.get(url, (res) => {
           let data = '';
 
           if (res.statusCode != 200) {
@@ -2264,13 +2258,7 @@ logger.info("checking peer " + peer);
     private getStringFromURL(url: string): Promise<string> {
         return new Promise((resolve, reject) => {
 
-          const options = {
-            headers: {
-                'Connection': 'keep-alive'
-            }
-          };
-
-          const request = http.get(url, options, (res) => {
+          const request = http.get(url, (res) => {
             let data = '';
 
             if (res.statusCode != 200) {
