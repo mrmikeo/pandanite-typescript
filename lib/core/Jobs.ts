@@ -313,17 +313,17 @@ export class PandaniteJobs{
 
         if (argv.reset === true) // reset chain
         {
-            await Block.deleteMany();
-            await Transaction.deleteMany();
-            await Balance.deleteMany();
-            await Token.deleteMany();
-            await Peer.deleteMany();
+            await Block.collection.drop();
+            await Transaction.collection.drop();
+            await Balance.collection.drop();
+            await Token.collection.drop();
+            await Peer.collection.drop();
             logger.warn("Chain is reset");
         }
 
         if (argv.resetpeers === true) // reset chain
         {
-            await Peer.deleteMany();
+            await Peer.collection.drop();
             logger.warn("Peers is reset");
         }
 
