@@ -9,8 +9,7 @@ import { v4 as uuidv4 } from 'uuid';
 import { setIntervalAsync, clearIntervalAsync } from 'set-interval-async';
 import { createLogger, format, transports } from 'winston';
 import * as net from 'net';
-import * as http from 'http';
-
+import { Curl } from 'node-libcurl';
 
 const { combine, timestamp, label, printf } = format;
 
@@ -2217,91 +2216,62 @@ logger.info("checking peer " + peer);
     }
 
     private getJSONFromURL(url: string): Promise<any> {
-      return new Promise((resolve, reject) => {
-
-        const options = {
-            headers: {
-                'Connection': 'keep-alive'
+        return new Promise((resolve, reject) => {
+          const curl = new Curl();
+          curl.setOpt('URL', url);
+          curl.setOpt('FOLLOWLOCATION', false);
+          curl.setOpt('TIMEOUT', 3000);
+      
+          curl.on('end', (statusCode: number, body: any) => {
+            if (statusCode != 200)
+            {
+                reject(statusCode);
             }
-        };
-
-        const request = http.get(url, options, (res) => {
-          let data = '';
-
-          if (res.statusCode != 200) {
-            request.destroy();
-            console.log(url + " returned " + res.statusCode);
-            reject("Error Code " + res.statusCode);
-          }
-
-          res.on('data', (chunk) => {
-            data += chunk;
-          });
-    
-          res.on('end', () => {
             try {
-              const jsonData = JSON.parse(data);
+              const jsonData = JSON.parse(body);
               resolve(jsonData);
             } catch (error) {
               reject(error);
             }
+            curl.close();
           });
+      
+          curl.on('error', (error) => {
+            reject(error);
+            curl.close();
+          });
+      
+          curl.perform();
         });
-    
-        request.on('error', (error) => {
-          reject(error);
+    }
+
+    private getStringFromURL(url: string): Promise<any> {
+        return new Promise((resolve, reject) => {
+          const curl = new Curl();
+          curl.setOpt('URL', url);
+          curl.setOpt('FOLLOWLOCATION', false);
+          curl.setOpt('TIMEOUT', 3000);
+      
+          curl.on('end', (statusCode: number, body: any) => {
+            if (statusCode != 200)
+            {
+                reject(statusCode);
+            }
+            try {
+              resolve(body);
+            } catch (error) {
+              reject(error);
+            }
+            curl.close();
+          });
+      
+          curl.on('error', (error) => {
+            reject(error);
+            curl.close();
+          });
+      
+          curl.perform();
         });
-
-        setTimeout(() => {
-            request.destroy();
-            reject(new Error('Request timed out'));
-        }, 3000);
-
-      });
     }
     
-    private getStringFromURL(url: string): Promise<string> {
-        return new Promise((resolve, reject) => {
-
-          const options = {
-            headers: {
-                'Connection': 'keep-alive'
-            }
-          };
-
-          const request = http.get(url, options, (res) => {
-            let data = '';
-
-            if (res.statusCode != 200) {
-                request.destroy();
-                console.log(url + " returned " + res.statusCode);
-                reject("Error Code " + res.statusCode);
-            }
-
-            res.on('data', (chunk) => {
-              data += chunk;
-            });
-      
-            res.on('end', () => {
-              try {
-                const stringData = data;
-                resolve(stringData);
-              } catch (error) {
-                reject(error);
-              }
-            });
-          });
-      
-          request.on('error', (error) => {
-            reject(error);
-          });
-
-          setTimeout(() => {
-            request.destroy();
-            reject(new Error('Request timed out'));
-          }, 3000);
-
-        });
-      }
-
 }
